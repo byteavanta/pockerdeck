@@ -1,4 +1,3 @@
-// Fibonacci-style planning poker card values
 const CARDS = ['3', '6', '9', '12', '15', '18', '21', '24', '27', '30', '30+','?'];
 
 let userName = null;
@@ -6,12 +5,9 @@ let ws = null;
 let myVote = null;
 let shouldReconnect = true;
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
-
 window.addEventListener('DOMContentLoaded', function () {
   document.getElementById('room-id-text').textContent = ROOM_ID;
 
-  // Keyboard shortcuts for the name modal
   var nameInput = document.getElementById('name-input');
   nameInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') submitName();
@@ -20,7 +16,6 @@ window.addEventListener('DOMContentLoaded', function () {
     nameInput.classList.remove('error');
   });
 
-  // Story textarea: Enter (without Shift) updates the story
   document.getElementById('story-text').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -28,10 +23,8 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // Build voting card buttons
   renderCards();
 
-  // Auto-join if this user already set a name for this room
   var saved = sessionStorage.getItem('name_' + ROOM_ID);
   if (saved) {
     userName = saved;
@@ -39,7 +32,6 @@ window.addEventListener('DOMContentLoaded', function () {
     showApp();
     connect();
   } else {
-    // Modal is already visible in HTML; just focus the input
     setTimeout(function () { nameInput.focus(); }, 50);
   }
 });
@@ -48,8 +40,6 @@ window.addEventListener('beforeunload', function () {
   shouldReconnect = false;
   if (ws) ws.close();
 });
-
-// ── Name modal ────────────────────────────────────────────────────────────────
 
 function submitName() {
   var input = document.getElementById('name-input');
@@ -69,8 +59,6 @@ function submitName() {
 function showApp() {
   document.getElementById('app').classList.remove('hidden');
 }
-
-// ── WebSocket connection ───────────────────────────────────────────────────────
 
 function connect() {
   var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -108,10 +96,7 @@ function setStatus(cls, text) {
   el.textContent = text;
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
-
 function render(state) {
-  // If the server shows this user hasn't voted (null), clear local selection too
   if (!state.revealed && state.users[userName] === null) {
     myVote = null;
   }
@@ -200,7 +185,6 @@ function renderControls(state) {
     revealBtn.classList.remove('hidden');
     resetBtn.classList.add('hidden');
 
-    // Reflect current user's vote selection
     document.querySelectorAll('.vote-card').forEach(function (card) {
       card.classList.toggle('selected', card.dataset.value === myVote);
     });
@@ -237,11 +221,8 @@ function renderResults(state) {
 
 function syncStory(story) {
   var el = document.getElementById('story-text');
-  // Only update if the user isn't actively typing in the field
   if (document.activeElement !== el) el.value = story || '';
 }
-
-// ── Actions ───────────────────────────────────────────────────────────────────
 
 function vote(value) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -271,14 +252,28 @@ function setStory() {
 }
 
 function copyLink() {
-  navigator.clipboard.writeText(location.href).then(function () {
-    var btn = document.getElementById('copy-btn');
-    var orig = btn.innerHTML;
+  var btn = document.getElementById('copy-btn');
+  var orig = btn.innerHTML;
+
+  function showSuccess() {
     btn.innerHTML = '✓ Copied!';
     btn.style.cssText = 'background:#10b981;color:white;border-color:#10b981';
     setTimeout(function () {
       btn.innerHTML = orig;
       btn.style.cssText = '';
     }, 2000);
-  });
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(location.href).then(showSuccess);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = location.href;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showSuccess();
+  }
 }
