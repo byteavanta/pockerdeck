@@ -122,6 +122,7 @@
   <script>
     const ROOM_ID = "{{ room_id }}";
     const IS_CREATOR = {{ 'true' if is_creator else 'false' }};
+    const CARDS = {{ cards | tojson }};
   </script>
   <script src="/static/js/room.js"></script>
 </body>

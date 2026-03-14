@@ -18,6 +18,8 @@ APP_VERSION = _VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "
 
 rooms: Dict[str, dict] = {}
 
+DEFAULT_CARDS = ['1', '2', '3', '5', '8', '13', '21', '34', '55', '?']
+
 
 class ConnectionManager:
     def __init__(self):
@@ -81,7 +83,7 @@ async def home(request: Request):
 
 
 @app.post("/create-room")
-async def create_room(backlog: str = Form(default="")):
+async def create_room(backlog: str = Form(default=""), cards: str = Form(default="")):
     room_id = str(uuid.uuid4())[:8]
     items = []
     if backlog:
@@ -94,6 +96,19 @@ async def create_room(backlog: str = Form(default="")):
             ][:50]
         except Exception:
             pass
+    card_list = DEFAULT_CARDS
+    if cards:
+        try:
+            raw_cards = json.loads(cards)
+            parsed = [
+                str(c).strip()[:8]
+                for c in raw_cards
+                if str(c).strip()
+            ][:30]
+            if parsed:
+                card_list = parsed
+        except Exception:
+            pass
     rooms[room_id] = {
         "users": {},
         "revealed": False,
@@ -101,6 +116,7 @@ async def create_room(backlog: str = Form(default="")):
         "admin": None,
         "backlog": items,
         "active_bli": None,
+        "cards": card_list,
     }
     return RedirectResponse(url=f"/room/{room_id}?creator=1", status_code=303)
 
@@ -109,9 +125,16 @@ async def create_room(backlog: str = Form(default="")):
 async def room_page(request: Request, room_id: str, creator: str = Query(default="")):
     if room_id not in rooms:
         return RedirectResponse(url="/")
+    room = rooms[room_id]
     return templates.TemplateResponse(
         "room.html",
-        {"request": request, "room_id": room_id, "version": APP_VERSION, "is_creator": creator == "1"},
+        {
+            "request": request,
+            "room_id": room_id,
+            "version": APP_VERSION,
+            "is_creator": creator == "1",
+            "cards": room.get("cards", DEFAULT_CARDS),
+        },
     )
 
 
