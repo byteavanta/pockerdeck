@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Card background -->
+  <rect x="2" y="1" width="28" height="30" rx="4" ry="4" fill="#1e293b" />
+  <!-- Card white face -->
+  <rect x="4" y="3" width="24" height="26" rx="3" ry="3" fill="#ffffff" />
+  <!-- Spade suit top-left -->
+  <text x="4.5" y="11" font-family="serif" font-size="8" font-weight="bold" fill="#1e293b">♠</text>
+  <!-- Center spade -->
+  <text x="7.5" y="22" font-family="serif" font-size="14" font-weight="bold" fill="#1e293b">♠</text>
+  <!-- Spade suit bottom-right (rotated) -->
+  <text x="19.5" y="29" font-family="serif" font-size="8" font-weight="bold" fill="#1e293b" transform="rotate(180 23 26.5)">♠</text>
+</svg>
