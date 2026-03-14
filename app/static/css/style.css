@@ -591,6 +591,95 @@ body {
    BACKLOG — create room
 ══════════════════════════════════════════════════ */
 
+.estimation-section {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 0.9rem;
+  text-align: left;
+}
+.estimation-section-header {
+  margin-bottom: 0.75rem;
+}
+.estimation-section-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #374151;
+}
+
+.est-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+.est-type-btn {
+  padding: 0.35rem 0.85rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 20px;
+  background: white;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.est-type-btn:hover { border-color: #a5b4fc; color: #4f46e5; }
+.est-type-btn.selected {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.cards-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+  min-height: 2rem;
+}
+.card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: white;
+  border: 2px solid #c7d2fe;
+  border-radius: 8px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #4f46e5;
+}
+.card-chip-remove {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  transition: color 0.15s;
+}
+.card-chip-remove:hover { color: #dc2626; }
+
+.card-add-row {
+  display: flex;
+  gap: 0.5rem;
+}
+.card-add-row input {
+  flex: 1;
+  padding: 0.45rem 0.8rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+.card-add-row input:focus { border-color: #4f46e5; }
+
 .backlog-create {
   background: #f8fafc;
   border: 2px solid #e2e8f0;

@@ -1,4 +1,5 @@
-const CARDS = ['3', '6', '9', '12', '15', '18', '21', '24', '27', '30', '30+','?'];
+// CARDS is injected by the server into the page before this script loads
+// (see room.html: const CARDS = {{ cards | tojson }};)
 
 let userName = null;
 let userRole = 'user';

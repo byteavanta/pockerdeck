@@ -17,7 +17,25 @@
         Create a room, share the link — no sign-up needed.
       </p>
 
-      <form id="create-form" action="/create-room" method="post" onsubmit="prepareBacklog()">
+      <form id="create-form" action="/create-room" method="post" onsubmit="prepareForm()">
+        <div class="estimation-section">
+          <div class="estimation-section-header">
+            <span class="estimation-section-label">🃏 Estimation Type</span>
+          </div>
+          <div class="est-type-row">
+            <button type="button" class="est-type-btn selected" data-type="fibonacci" onclick="pickEstType(this)">📊 Story Points</button>
+            <button type="button" class="est-type-btn" data-type="tshirt" onclick="pickEstType(this)">👕 T-shirt</button>
+            <button type="button" class="est-type-btn" data-type="hours" onclick="pickEstType(this)">⏱ Hours</button>
+            <button type="button" class="est-type-btn" data-type="custom" onclick="pickEstType(this)">✏️ Custom</button>
+          </div>
+          <div id="cards-editor" class="cards-editor"></div>
+          <div class="card-add-row">
+            <input type="text" id="card-input" placeholder="Add a card value…" maxlength="8" autocomplete="off" />
+            <button type="button" onclick="addCard()" class="btn btn-secondary">Add</button>
+          </div>
+          <input type="hidden" name="cards" id="cards-data" />
+        </div>
+
         <div class="backlog-create">
           <div class="backlog-create-header">
             <span class="backlog-create-label">📋 Backlog Items</span>
@@ -59,11 +77,81 @@
       if (code) window.location.href = '/room/' + encodeURIComponent(code);
     }
 
+    // ── Estimation type & card editor ────────────────────────────────────
+    var PRESETS = {
+      fibonacci: ['1', '2', '3', '5', '8', '13', '21', '34', '55', '?'],
+      tshirt:    ['XS', 'S', 'M', 'L', 'XL', 'XXL', '?'],
+      hours:     ['3', '6', '9', '12', '15', '18', '21', '24', '27', '30', '30+', '?'],
+    };
+
+    var currentCards = PRESETS.fibonacci.slice();
+
+    // render initial state
+    document.addEventListener('DOMContentLoaded', function () {
+      renderCardChips();
+      document.getElementById('card-input').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); addCard(); }
+      });
+    });
+
+    function pickEstType(btn) {
+      document.querySelectorAll('.est-type-btn').forEach(function (b) {
+        b.classList.remove('selected');
+      });
+      btn.classList.add('selected');
+      var type = btn.dataset.type;
+      if (type !== 'custom') {
+        currentCards = PRESETS[type].slice();
+        renderCardChips();
+      }
+    }
+
+    function addCard() {
+      var input = document.getElementById('card-input');
+      var val = input.value.trim();
+      if (!val || val.length > 8) return;
+      if (currentCards.indexOf(val) !== -1) return;
+      currentCards.push(val);
+      input.value = '';
+      renderCardChips();
+      input.focus();
+      // switch to custom mode
+      document.querySelectorAll('.est-type-btn').forEach(function (b) {
+        b.classList.toggle('selected', b.dataset.type === 'custom');
+      });
+    }
+
+    function removeCard(index) {
+      currentCards.splice(index, 1);
+      renderCardChips();
+    }
+
+    function renderCardChips() {
+      var editor = document.getElementById('cards-editor');
+      editor.innerHTML = '';
+      currentCards.forEach(function (val, i) {
+        var chip = document.createElement('span');
+        chip.className = 'card-chip';
+        var text = document.createElement('span');
+        text.textContent = val;
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'card-chip-remove';
+        rm.textContent = '×';
+        rm.onclick = function () { removeCard(i); };
+        chip.appendChild(text);
+        chip.appendChild(rm);
+        editor.appendChild(chip);
+      });
+    }
+
     // ── Backlog items ────────────────────────────────────────────────────
     var bliItems = [];
 
-    document.getElementById('bli-input').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); addBli(); }
+    document.addEventListener('DOMContentLoaded', function () {
+      document.getElementById('bli-input').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); addBli(); }
+      });
     });
 
     function addBli() {
@@ -105,7 +193,9 @@
       });
     }
 
-    function prepareBacklog() {
+    function prepareForm() {
+      var cards = currentCards.length >= 1 ? currentCards : PRESETS.fibonacci;
+      document.getElementById('cards-data').value = JSON.stringify(cards);
       document.getElementById('backlog-data').value = JSON.stringify(bliItems);
     }
   </script>
