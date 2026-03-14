@@ -480,6 +480,78 @@ body {
   40%, 80%  { transform: translateX(6px); }
 }
 
+/* Role selector in the name modal */
+.role-selector {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4a5568;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+.role-option input[type="radio"] { display: none; }
+.role-option:has(input:checked) {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+/* ── Viewer badge on participant card ── */
+.p-badge.viewer-badge {
+  background: #f0fdf4;
+  border: 2px dashed #86efac;
+  color: #16a34a;
+  font-size: 1.3rem;
+}
+
+/* ── Admin controls on participant cards ── */
+.participant-card { position: relative; }
+
+.p-actions {
+  display: flex;
+  gap: 0.2rem;
+  margin-top: 0.25rem;
+}
+
+.btn-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+.btn-icon:hover { background: #e2e8f0; color: #1e293b; }
+.btn-icon-danger:hover { background: #fee2e2; color: #dc2626; }
+
+/* Story textarea readonly state */
+#story-text:read-only {
+  background: #f8fafc;
+  color: #64748b;
+  cursor: default;
+  resize: none;
+}
+
 /* ══════════════════════════════════════════════════
    UTILITIES
 ══════════════════════════════════════════════════ */

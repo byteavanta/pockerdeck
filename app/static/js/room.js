@@ -1,12 +1,18 @@
 const CARDS = ['3', '6', '9', '12', '15', '18', '21', '24', '27', '30', '30+','?'];
 
 let userName = null;
+let userRole = 'user';
 let ws = null;
 let myVote = null;
 let shouldReconnect = true;
 
 window.addEventListener('DOMContentLoaded', function () {
   document.getElementById('room-id-text').textContent = ROOM_ID;
+
+  if (IS_CREATOR) {
+    var roleSelector = document.getElementById('role-selector');
+    if (roleSelector) roleSelector.style.display = 'none';
+  }
 
   var nameInput = document.getElementById('name-input');
   nameInput.addEventListener('keydown', function (e) {
@@ -28,6 +34,7 @@ window.addEventListener('DOMContentLoaded', function () {
   var saved = sessionStorage.getItem('name_' + ROOM_ID);
   if (saved) {
     userName = saved;
+    userRole = sessionStorage.getItem('role_' + ROOM_ID) || 'user';
     document.getElementById('name-modal').classList.add('hidden');
     showApp();
     connect();
@@ -49,8 +56,11 @@ function submitName() {
     input.focus();
     return;
   }
+  var roleInput = document.querySelector('input[name="role"]:checked');
   userName = name;
+  userRole = IS_CREATOR ? 'user' : (roleInput ? roleInput.value : 'user');
   sessionStorage.setItem('name_' + ROOM_ID, name);
+  sessionStorage.setItem('role_' + ROOM_ID, userRole);
   document.getElementById('name-modal').classList.add('hidden');
   showApp();
   connect();
@@ -62,7 +72,7 @@ function showApp() {
 
 function connect() {
   var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  var url = protocol + '//' + location.host + '/ws/' + ROOM_ID + '/' + encodeURIComponent(userName);
+  var url = protocol + '//' + location.host + '/ws/' + ROOM_ID + '/' + encodeURIComponent(userName) + '?role=' + encodeURIComponent(userRole);
   ws = new WebSocket(url);
 
   ws.onopen = function () {
@@ -71,6 +81,10 @@ function connect() {
 
   ws.onmessage = function (event) {
     var state = JSON.parse(event.data);
+    if (state.renamed && state.renamed.from === userName) {
+      userName = state.renamed.to;
+      sessionStorage.setItem('name_' + ROOM_ID, userName);
+    }
     render(state);
   };
 
@@ -82,6 +96,12 @@ function connect() {
     if (event.code === 4004) {
       shouldReconnect = false;
       alert('This room no longer exists. You will be redirected to the home page.');
+      window.location.href = '/';
+      return;
+    }
+    if (event.code === 4005) {
+      shouldReconnect = false;
+      alert('You have been removed from the room by the admin.');
       window.location.href = '/';
       return;
     }
@@ -97,14 +117,17 @@ function setStatus(cls, text) {
 }
 
 function render(state) {
-  if (!state.revealed && state.users[userName] === null) {
+  if (state.users[userName]) {
+    userRole = state.users[userName].role;
+  }
+  if (!state.revealed && state.users[userName] && state.users[userName].vote === null) {
     myVote = null;
   }
   renderParticipants(state);
   renderProgress(state);
   renderControls(state);
   renderResults(state);
-  syncStory(state.story);
+  syncStory(state);
 }
 
 function renderCards() {
@@ -132,15 +155,23 @@ function renderParticipants(state) {
     return;
   }
 
+  var isAdmin = (userRole === 'admin');
+
   entries.forEach(function (entry) {
     var name = entry[0];
-    var voteVal = entry[1];
+    var info = entry[1];
+    var voteVal = info.vote;
+    var role = info.role;
+    var isViewer = (role === 'viewer');
 
     var card = document.createElement('div');
     card.className = 'participant-card';
 
     var badge = document.createElement('div');
-    if (state.revealed) {
+    if (isViewer) {
+      badge.className = 'p-badge viewer-badge';
+      badge.textContent = '👁';
+    } else if (state.revealed) {
       var isNA = voteVal === null || voteVal === undefined;
       badge.className = 'p-badge revealed' + (isNA ? ' no-vote' : '');
       badge.textContent = isNA ? '–' : voteVal;
@@ -151,10 +182,34 @@ function renderParticipants(state) {
 
     var nameEl = document.createElement('div');
     nameEl.className = 'p-name' + (name === userName ? ' me' : '');
-    nameEl.textContent = name;
+
+    var roleIcon = role === 'admin' ? ' 👑' : '';
+    nameEl.textContent = name + roleIcon;
 
     card.appendChild(badge);
     card.appendChild(nameEl);
+
+    if (isAdmin && name !== userName) {
+      var actions = document.createElement('div');
+      actions.className = 'p-actions';
+
+      var renameBtn = document.createElement('button');
+      renameBtn.className = 'btn-icon';
+      renameBtn.title = 'Rename';
+      renameBtn.textContent = '✏️';
+      renameBtn.addEventListener('click', function () { renameUser(name); });
+
+      var kickBtn = document.createElement('button');
+      kickBtn.className = 'btn-icon btn-icon-danger';
+      kickBtn.title = 'Kick';
+      kickBtn.textContent = '✕';
+      kickBtn.addEventListener('click', function () { kickUser(name); });
+
+      actions.appendChild(renameBtn);
+      actions.appendChild(kickBtn);
+      card.appendChild(actions);
+    }
+
     container.appendChild(card);
   });
 }
@@ -164,9 +219,9 @@ function renderProgress(state) {
     document.getElementById('vote-progress').textContent = '';
     return;
   }
-  var vals = Object.values(state.users);
-  var voted = vals.filter(function (v) { return v === 'voted'; }).length;
-  var total = vals.length;
+  var voters = Object.values(state.users).filter(function (info) { return info.role !== 'viewer'; });
+  var voted = voters.filter(function (info) { return info.vote === 'voted'; }).length;
+  var total = voters.length;
   document.getElementById('vote-progress').textContent =
     total > 0 ? voted + ' of ' + total + ' voted' : '';
 }
@@ -175,19 +230,30 @@ function renderControls(state) {
   var cardsPanel = document.getElementById('cards-panel');
   var revealBtn  = document.getElementById('reveal-btn');
   var resetBtn   = document.getElementById('reset-btn');
+  var storyBtn   = document.getElementById('story-btn');
+  var storyText  = document.getElementById('story-text');
+
+  var isAdmin  = (userRole === 'admin');
+  var isViewer = (userRole === 'viewer');
+  var canAct   = !isViewer;
+
+  storyText.readOnly = isViewer;
+  storyBtn.classList.toggle('hidden', isViewer);
 
   if (state.revealed) {
     cardsPanel.classList.add('hidden');
     revealBtn.classList.add('hidden');
-    resetBtn.classList.remove('hidden');
+    resetBtn.classList.toggle('hidden', !canAct);
   } else {
-    cardsPanel.classList.remove('hidden');
-    revealBtn.classList.remove('hidden');
+    cardsPanel.classList.toggle('hidden', isViewer);
+    revealBtn.classList.toggle('hidden', !canAct);
     resetBtn.classList.add('hidden');
 
-    document.querySelectorAll('.vote-card').forEach(function (card) {
-      card.classList.toggle('selected', card.dataset.value === myVote);
-    });
+    if (!isViewer) {
+      document.querySelectorAll('.vote-card').forEach(function (card) {
+        card.classList.toggle('selected', card.dataset.value === myVote);
+      });
+    }
   }
 }
 
@@ -200,10 +266,10 @@ function renderResults(state) {
   panel.classList.remove('hidden');
 
   var numeric = Object.values(state.users)
-    .filter(function (v) {
-      return v !== null && v !== undefined && !isNaN(parseFloat(v));
+    .filter(function (info) {
+      return info.role !== 'viewer' && info.vote !== null && info.vote !== undefined && !isNaN(parseFloat(info.vote));
     })
-    .map(Number);
+    .map(function (info) { return Number(info.vote); });
 
   if (numeric.length > 0) {
     var sum = numeric.reduce(function (a, b) { return a + b; }, 0);
@@ -219,9 +285,9 @@ function renderResults(state) {
   }
 }
 
-function syncStory(story) {
+function syncStory(state) {
   var el = document.getElementById('story-text');
-  if (document.activeElement !== el) el.value = story || '';
+  if (document.activeElement !== el) el.value = state.story || '';
 }
 
 function vote(value) {
@@ -245,6 +311,20 @@ function newRound() {
   ws.send(JSON.stringify({ action: 'reset', story: story }));
 }
 
+function kickUser(target) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'kick', target: target }));
+}
+
+function renameUser(target) {
+  var newName = prompt('Enter new name for "' + target + '":');
+  if (!newName) return;
+  newName = newName.trim();
+  if (!newName) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'rename_user', target: target, new_name: newName }));
+}
+
 function setStory(btn) {
   var story = document.getElementById('story-text').value;
 
@@ -265,6 +345,7 @@ function setStory(btn) {
 function copyLink() {
   var btn = document.getElementById('copy-btn');
   var orig = btn.innerHTML;
+  var cleanUrl = location.origin + location.pathname;
 
   function showSuccess() {
     btn.innerHTML = '✓ Copied!';
@@ -276,10 +357,10 @@ function copyLink() {
   }
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(location.href).then(showSuccess);
+    navigator.clipboard.writeText(cleanUrl).then(showSuccess);
   } else {
     var ta = document.createElement('textarea');
-    ta.value = location.href;
+    ta.value = cleanUrl;
     ta.style.cssText = 'position:fixed;opacity:0';
     document.body.appendChild(ta);
     ta.select();

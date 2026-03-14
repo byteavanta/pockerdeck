@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 from typing import Dict
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Query
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -52,17 +52,21 @@ def build_state(room_id: str) -> dict:
     """Build the state payload sent to all clients."""
     room = rooms[room_id]
     users: Dict[str, object] = {}
-    for name, vote in room["users"].items():
+    for name, info in room["users"].items():
+        vote = info["vote"]
+        role = info["role"]
         if room["revealed"]:
-            users[name] = vote          # actual vote value (string or None)
+            display_vote = vote
         else:
-            users[name] = "voted" if vote is not None else None  # anonymised
+            display_vote = "voted" if vote is not None else None
+        users[name] = {"vote": display_vote, "role": role}
 
     return {
         "type": "state",
         "users": users,
         "revealed": room["revealed"],
         "story": room["story"],
+        "admin": room["admin"],
     }
 
 
@@ -76,29 +80,44 @@ async def home(request: Request):
 @app.post("/create-room")
 async def create_room():
     room_id = str(uuid.uuid4())[:8]
-    rooms[room_id] = {"users": {}, "revealed": False, "story": ""}
-    return RedirectResponse(url=f"/room/{room_id}", status_code=303)
+    rooms[room_id] = {"users": {}, "revealed": False, "story": "", "admin": None}
+    return RedirectResponse(url=f"/room/{room_id}?creator=1", status_code=303)
 
 
 @app.get("/room/{room_id}")
-async def room_page(request: Request, room_id: str):
+async def room_page(request: Request, room_id: str, creator: str = Query(default="")):
     if room_id not in rooms:
         return RedirectResponse(url="/")
-    return templates.TemplateResponse("room.html", {"request": request, "room_id": room_id, "version": APP_VERSION})
+    return templates.TemplateResponse(
+        "room.html",
+        {"request": request, "room_id": room_id, "version": APP_VERSION, "is_creator": creator == "1"},
+    )
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws/{room_id}/{user_name}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str, user_name: str):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    room_id: str,
+    user_name: str,
+    role: str = Query(default="user"),
+):
     if room_id not in rooms:
         await websocket.close(code=4004)
         return
 
     user_name = user_name.strip()[:32] or "Anonymous"
 
+    # Sanitise requested role; first connector always becomes admin
+    if role not in ("user", "viewer"):
+        role = "user"
+    if rooms[room_id]["admin"] is None:
+        role = "admin"
+        rooms[room_id]["admin"] = user_name
+
     await manager.connect(room_id, user_name, websocket)
-    rooms[room_id]["users"][user_name] = None
+    rooms[room_id]["users"][user_name] = {"vote": None, "role": role}
     await manager.broadcast(room_id, build_state(room_id))
 
     try:
@@ -112,28 +131,75 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user_name: str)
                 continue
 
             action = data.get("action")
+            is_admin = rooms[room_id]["admin"] == user_name
+            user_role = rooms[room_id]["users"].get(user_name, {}).get("role")
 
             if action == "vote":
-                value = str(data.get("value", ""))[:8]
-                rooms[room_id]["users"][user_name] = value
-                await manager.broadcast(room_id, build_state(room_id))
+                if user_role in ("admin", "user"):
+                    value = str(data.get("value", ""))[:8]
+                    rooms[room_id]["users"][user_name]["vote"] = value
+                    await manager.broadcast(room_id, build_state(room_id))
 
             elif action == "reveal":
-                rooms[room_id]["revealed"] = True
-                await manager.broadcast(room_id, build_state(room_id))
+                if user_role in ("admin", "user"):
+                    rooms[room_id]["revealed"] = True
+                    await manager.broadcast(room_id, build_state(room_id))
 
             elif action == "reset":
-                rooms[room_id]["revealed"] = False
-                rooms[room_id]["story"] = str(data.get("story", ""))[:500]
-                for u in rooms[room_id]["users"]:
-                    rooms[room_id]["users"][u] = None
-                await manager.broadcast(room_id, build_state(room_id))
+                if user_role in ("admin", "user"):
+                    rooms[room_id]["revealed"] = False
+                    rooms[room_id]["story"] = str(data.get("story", ""))[:500]
+                    for u in rooms[room_id]["users"]:
+                        rooms[room_id]["users"][u]["vote"] = None
+                    await manager.broadcast(room_id, build_state(room_id))
 
             elif action == "set_story":
-                rooms[room_id]["story"] = str(data.get("story", ""))[:500]
-                await manager.broadcast(room_id, build_state(room_id))
+                if user_role in ("admin", "user"):
+                    rooms[room_id]["story"] = str(data.get("story", ""))[:500]
+                    await manager.broadcast(room_id, build_state(room_id))
+
+            elif action == "kick":
+                if is_admin:
+                    target = str(data.get("target", ""))[:32]
+                    if target != user_name and target in manager.connections.get(room_id, {}):
+                        await manager.connections[room_id][target].close(code=4005)
+
+            elif action == "rename_user":
+                if is_admin:
+                    target = str(data.get("target", "")).strip()[:32]
+                    new_name = str(data.get("new_name", "")).strip()[:32]
+                    if (
+                        target in rooms[room_id]["users"]
+                        and new_name
+                        and new_name not in rooms[room_id]["users"]
+                    ):
+
+                        info = rooms[room_id]["users"].pop(target)
+                        rooms[room_id]["users"][new_name] = info
+
+                        if target in manager.connections.get(room_id, {}):
+                            manager.connections[room_id][new_name] = manager.connections[room_id].pop(target)
+
+                        if rooms[room_id]["admin"] == target:
+                            rooms[room_id]["admin"] = new_name
+
+                        msg = build_state(room_id)
+                        msg["renamed"] = {"from": target, "to": new_name}
+                        await manager.broadcast(room_id, msg)
 
     except WebSocketDisconnect:
         manager.disconnect(room_id, user_name)
         rooms[room_id]["users"].pop(user_name, None)
+
+        if rooms[room_id]["admin"] == user_name:
+            promoted = next(
+                (n for n, info in rooms[room_id]["users"].items() if info["role"] != "viewer"),
+                None,
+            )
+            if promoted:
+                rooms[room_id]["admin"] = promoted
+                rooms[room_id]["users"][promoted]["role"] = "admin"
+            else:
+                rooms[room_id]["admin"] = None
         await manager.broadcast(room_id, build_state(room_id))
+

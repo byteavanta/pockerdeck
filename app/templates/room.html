@@ -23,6 +23,16 @@
         autocorrect="off"
         spellcheck="false"
       />
+      <div id="role-selector" class="role-selector">
+        <label class="role-option">
+          <input type="radio" name="role" value="user" checked />
+          <span>🗳️ Participant</span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="viewer" />
+          <span>👁 Viewer</span>
+        </label>
+      </div>
       <button onclick="submitName()" class="btn btn-primary btn-full">Join →</button>
     </div>
   </div>
@@ -101,8 +111,11 @@
 
   <footer class="app-footer">v{{ version }}</footer>
 
-  <!-- Inject room ID for JS before loading the script -->
-  <script>const ROOM_ID = "{{ room_id }}";</script>
+  <!-- Inject room ID and creator flag for JS before loading the script -->
+  <script>
+    const ROOM_ID = "{{ room_id }}";
+    const IS_CREATOR = {{ 'true' if is_creator else 'false' }};
+  </script>
   <script src="/static/js/room.js"></script>
 </body>
 </html>
