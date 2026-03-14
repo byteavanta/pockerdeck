@@ -123,6 +123,7 @@ function render(state) {
   if (!state.revealed && state.users[userName] && state.users[userName].vote === null) {
     myVote = null;
   }
+  renderBacklog(state);
   renderParticipants(state);
   renderProgress(state);
   renderControls(state);
@@ -283,6 +284,84 @@ function renderResults(state) {
       document.getElementById(id).textContent = '–';
     });
   }
+}
+
+function renderBacklog(state) {
+  var panel = document.getElementById('backlog-panel');
+  var list  = document.getElementById('backlog-list');
+  var backlog = state.backlog || [];
+
+  if (backlog.length === 0) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+
+  list.innerHTML = '';
+  var isAdmin = (userRole === 'admin');
+
+  backlog.forEach(function (item, idx) {
+    var isActive = state.active_bli === idx;
+    var isDone   = item.done;
+
+    var li = document.createElement('li');
+    li.className = 'backlog-item' +
+      (isActive ? ' active' : '') +
+      (isDone   ? ' done'   : '');
+
+    var num = document.createElement('span');
+    num.className = 'bli-num';
+    num.textContent = (idx + 1) + '.';
+
+    var title = document.createElement('span');
+    title.className = 'bli-title';
+    title.textContent = item.title;
+
+    li.appendChild(num);
+    li.appendChild(title);
+
+    if (isActive) {
+      var tag = document.createElement('span');
+      tag.className = 'bli-tag active-tag';
+      tag.textContent = '▶ Voting';
+      li.appendChild(tag);
+
+      if (isAdmin) {
+        var doneBtn = document.createElement('button');
+        doneBtn.className = 'btn btn-secondary bli-vote-btn';
+        doneBtn.textContent = '✓ Mark Done';
+        (function (i) {
+          doneBtn.onclick = function () { markBliDone(i); };
+        }(idx));
+        li.appendChild(doneBtn);
+      }
+    } else if (isDone) {
+      var tag = document.createElement('span');
+      tag.className = 'bli-tag done-tag';
+      tag.textContent = '✓ Done';
+      li.appendChild(tag);
+    } else if (isAdmin) {
+      var voteBtn = document.createElement('button');
+      voteBtn.className = 'btn btn-secondary bli-vote-btn';
+      voteBtn.textContent = 'Vote on this';
+      (function (i) {
+        voteBtn.onclick = function () { selectBli(i); };
+      }(idx));
+      li.appendChild(voteBtn);
+    }
+
+    list.appendChild(li);
+  });
+}
+
+function selectBli(index) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'select_bli', index: index }));
+}
+
+function markBliDone(index) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'mark_bli_done', index: index }));
 }
 
 function syncStory(state) {

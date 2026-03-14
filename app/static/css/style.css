@@ -588,6 +588,152 @@ body {
 }
 
 /* ══════════════════════════════════════════════════
+   BACKLOG — create room
+══════════════════════════════════════════════════ */
+
+.backlog-create {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  text-align: left;
+}
+.backlog-create-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.backlog-create-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #374151;
+}
+.backlog-create-hint {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+.backlog-input-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.backlog-input-row input {
+  flex: 1;
+  padding: 0.55rem 0.9rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+.backlog-input-row input:focus { border-color: #4f46e5; }
+
+.bli-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.bli-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  color: #374151;
+}
+.bli-item .bli-num {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 600;
+  min-width: 1.4rem;
+}
+.bli-item .bli-title { flex: 1; }
+.bli-remove {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+.bli-remove:hover { background: #fee2e2; color: #dc2626; }
+
+/* ══════════════════════════════════════════════════
+   BACKLOG — room panel
+══════════════════════════════════════════════════ */
+
+.backlog-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.backlog-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 10px;
+  border: 2px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 0.9rem;
+  color: #374151;
+  transition: border-color 0.2s, background 0.2s;
+}
+.backlog-item.active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+.backlog-item.done {
+  opacity: 0.5;
+}
+.backlog-item.done .bli-title {
+  text-decoration: line-through;
+}
+.backlog-item .bli-num {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  font-weight: 600;
+  min-width: 1.5rem;
+  flex-shrink: 0;
+}
+.backlog-item .bli-title {
+  flex: 1;
+  font-weight: 500;
+}
+.bli-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.bli-tag.active-tag {
+  background: #4f46e5;
+  color: white;
+}
+.bli-tag.done-tag {
+  background: #d1fae5;
+  color: #065f46;
+}
+.bli-vote-btn {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════
    VERSION FOOTER
 ══════════════════════════════════════════════════ */
 

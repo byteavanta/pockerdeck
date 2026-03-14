@@ -1,8 +1,9 @@
+import json
 import uuid
 from pathlib import Path
 from typing import Dict
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Query
+from fastapi import FastAPI, Form, WebSocket, WebSocketDisconnect, Request, Query
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -67,6 +68,8 @@ def build_state(room_id: str) -> dict:
         "revealed": room["revealed"],
         "story": room["story"],
         "admin": room["admin"],
+        "backlog": room.get("backlog", []),
+        "active_bli": room.get("active_bli"),
     }
 
 
@@ -78,9 +81,27 @@ async def home(request: Request):
 
 
 @app.post("/create-room")
-async def create_room():
+async def create_room(backlog: str = Form(default="")):
     room_id = str(uuid.uuid4())[:8]
-    rooms[room_id] = {"users": {}, "revealed": False, "story": "", "admin": None}
+    items = []
+    if backlog:
+        try:
+            raw = json.loads(backlog)
+            items = [
+                {"title": str(t).strip()[:200], "done": False}
+                for t in raw
+                if str(t).strip()
+            ][:50]
+        except Exception:
+            pass
+    rooms[room_id] = {
+        "users": {},
+        "revealed": False,
+        "story": "",
+        "admin": None,
+        "backlog": items,
+        "active_bli": None,
+    }
     return RedirectResponse(url=f"/room/{room_id}?creator=1", status_code=303)
 
 
@@ -152,6 +173,25 @@ async def websocket_endpoint(
                     for u in rooms[room_id]["users"]:
                         rooms[room_id]["users"][u]["vote"] = None
                     await manager.broadcast(room_id, build_state(room_id))
+
+            elif action == "mark_bli_done":
+                if is_admin:
+                    idx = data.get("index")
+                    backlog = rooms[room_id].get("backlog", [])
+                    if isinstance(idx, int) and 0 <= idx < len(backlog):
+                        backlog[idx]["done"] = True
+                        if rooms[room_id].get("active_bli") == idx:
+                            rooms[room_id]["active_bli"] = None
+                        await manager.broadcast(room_id, build_state(room_id))
+
+            elif action == "select_bli":
+                if is_admin:
+                    idx = data.get("index")
+                    backlog = rooms[room_id].get("backlog", [])
+                    if isinstance(idx, int) and 0 <= idx < len(backlog):
+                        rooms[room_id]["active_bli"] = idx
+                        rooms[room_id]["story"] = backlog[idx]["title"]
+                        await manager.broadcast(room_id, build_state(room_id))
 
             elif action == "set_story":
                 if user_role in ("admin", "user"):
