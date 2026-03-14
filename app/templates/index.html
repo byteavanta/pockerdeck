@@ -17,7 +17,19 @@
         Create a room, share the link — no sign-up needed.
       </p>
 
-      <form action="/create-room" method="post">
+      <form id="create-form" action="/create-room" method="post" onsubmit="prepareBacklog()">
+        <div class="backlog-create">
+          <div class="backlog-create-header">
+            <span class="backlog-create-label">📋 Backlog Items</span>
+            <span class="backlog-create-hint">Optional — add stories to vote on</span>
+          </div>
+          <div class="backlog-input-row">
+            <input type="text" id="bli-input" placeholder="Add a backlog item…" maxlength="200" autocomplete="off" />
+            <button type="button" onclick="addBli()" class="btn btn-secondary">Add</button>
+          </div>
+          <ul id="bli-list" class="bli-list"></ul>
+          <input type="hidden" name="backlog" id="backlog-data" value="[]" />
+        </div>
         <button type="submit" class="btn btn-primary btn-large">+ Create Room</button>
       </form>
 
@@ -45,6 +57,56 @@
     function joinByCode() {
       var code = document.getElementById('room-code').value.trim();
       if (code) window.location.href = '/room/' + encodeURIComponent(code);
+    }
+
+    // ── Backlog items ────────────────────────────────────────────────────
+    var bliItems = [];
+
+    document.getElementById('bli-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); addBli(); }
+    });
+
+    function addBli() {
+      var input = document.getElementById('bli-input');
+      var val = input.value.trim();
+      if (!val) return;
+      bliItems.push(val);
+      input.value = '';
+      renderBliList();
+      input.focus();
+    }
+
+    function removeBli(index) {
+      bliItems.splice(index, 1);
+      renderBliList();
+    }
+
+    function renderBliList() {
+      var list = document.getElementById('bli-list');
+      list.innerHTML = '';
+      bliItems.forEach(function (item, i) {
+        var li = document.createElement('li');
+        li.className = 'bli-item';
+        var num = document.createElement('span');
+        num.className = 'bli-num';
+        num.textContent = (i + 1) + '.';
+        var text = document.createElement('span');
+        text.className = 'bli-title';
+        text.textContent = item;
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'bli-remove';
+        del.textContent = '✕';
+        del.onclick = function () { removeBli(i); };
+        li.appendChild(num);
+        li.appendChild(text);
+        li.appendChild(del);
+        list.appendChild(li);
+      });
+    }
+
+    function prepareBacklog() {
+      document.getElementById('backlog-data').value = JSON.stringify(bliItems);
     }
   </script>
 
