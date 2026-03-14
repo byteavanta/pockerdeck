@@ -19,7 +19,7 @@ window.addEventListener('DOMContentLoaded', function () {
   document.getElementById('story-text').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      setStory();
+      setStory(document.getElementById('story-btn'));
     }
   });
 
@@ -245,10 +245,21 @@ function newRound() {
   ws.send(JSON.stringify({ action: 'reset', story: story }));
 }
 
-function setStory() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+function setStory(btn) {
   var story = document.getElementById('story-text').value;
-  ws.send(JSON.stringify({ action: 'set_story', story: story }));
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ action: 'set_story', story: story }));
+  }
+
+  if (!btn) return;
+  var orig = btn.innerHTML;
+  btn.innerHTML = '✓ Updated';
+  btn.classList.add('btn-success-flash');
+  setTimeout(function () {
+    btn.innerHTML = orig;
+    btn.classList.remove('btn-success-flash');
+  }, 2000);
 }
 
 function copyLink() {
@@ -257,10 +268,10 @@ function copyLink() {
 
   function showSuccess() {
     btn.innerHTML = '✓ Copied!';
-    btn.style.cssText = 'background:#10b981;color:white;border-color:#10b981';
+    btn.classList.add('btn-success-flash');
     setTimeout(function () {
       btn.innerHTML = orig;
-      btn.style.cssText = '';
+      btn.classList.remove('btn-success-flash');
     }, 2000);
   }
 
