@@ -296,7 +296,6 @@ function renderResults(state) {
 
 function renderBacklog(state) {
   lastState = state;
-  var panel = document.getElementById('backlog-panel');
   var list  = document.getElementById('backlog-list');
   var addRow = document.getElementById('backlog-add-row');
   var emptyMsg = document.getElementById('backlog-empty');
