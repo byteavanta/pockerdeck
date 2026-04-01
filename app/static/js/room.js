@@ -492,9 +492,9 @@ function startEditBli(index) {
 
 function submitEditBli(index, value) {
   var title = value.trim();
-  editingBliIndex = null;
   if (!title) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  editingBliIndex = null;
   ws.send(JSON.stringify({ action: 'edit_bli', index: index, title: title }));
 }
 
