@@ -3,6 +3,9 @@ let userRole = 'user';
 let ws = null;
 let myVote = null;
 let shouldReconnect = true;
+let editingBliIndex = null;
+let lastState = null;
+let confirmingDeleteBli = null;
 
 window.addEventListener('DOMContentLoaded', function () {
   document.getElementById('room-id-text').textContent = ROOM_ID;
@@ -24,6 +27,13 @@ window.addEventListener('DOMContentLoaded', function () {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       setStory(document.getElementById('story-btn'));
+    }
+  });
+
+  document.getElementById('bli-room-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addBliInRoom();
     }
   });
 
@@ -285,18 +295,22 @@ function renderResults(state) {
 }
 
 function renderBacklog(state) {
-  var panel = document.getElementById('backlog-panel');
+  lastState = state;
   var list  = document.getElementById('backlog-list');
+  var addRow = document.getElementById('backlog-add-row');
+  var emptyMsg = document.getElementById('backlog-empty');
   var backlog = state.backlog || [];
+  var isAdmin = (userRole === 'admin');
 
-  if (backlog.length === 0) {
-    panel.classList.add('hidden');
-    return;
-  }
-  panel.classList.remove('hidden');
+  addRow.classList.toggle('hidden', !isAdmin);
 
   list.innerHTML = '';
-  var isAdmin = (userRole === 'admin');
+
+  if (backlog.length === 0) {
+    emptyMsg.classList.remove('hidden');
+  } else {
+    emptyMsg.classList.add('hidden');
+  }
 
   backlog.forEach(function (item, idx) {
     var isActive = state.active_bli === idx;
@@ -348,8 +362,105 @@ function renderBacklog(state) {
       li.appendChild(voteBtn);
     }
 
+    if (isAdmin) {
+      var actions = document.createElement('span');
+      actions.className = 'bli-actions';
+
+      var editBtn = document.createElement('button');
+      editBtn.className = 'btn-icon';
+      editBtn.title = 'Edit';
+      editBtn.textContent = '✏️';
+      (function (i) {
+        editBtn.onclick = function () { startEditBli(i); };
+      }(idx));
+
+      var delBtn = document.createElement('button');
+      delBtn.className = 'btn-icon btn-icon-danger';
+      delBtn.title = 'Delete';
+      delBtn.textContent = '🗑';
+      (function (i) {
+        delBtn.onclick = function () { confirmDeleteBli(i); };
+      }(idx));
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+      li.appendChild(actions);
+    }
+
+    // Inline delete confirmation
+    if (isAdmin && confirmingDeleteBli === idx) {
+      li.classList.add('bli-confirming-delete');
+
+      var confirmRow = document.createElement('div');
+      confirmRow.className = 'bli-delete-confirm';
+
+      var confirmLabel = document.createElement('span');
+      confirmLabel.className = 'bli-delete-label';
+      confirmLabel.textContent = 'Delete?';
+
+      var yesBtn = document.createElement('button');
+      yesBtn.className = 'btn btn-danger-sm';
+      yesBtn.textContent = 'Yes';
+      (function (i) {
+        yesBtn.onclick = function () { deleteBli(i); };
+      }(idx));
+
+      var noBtn = document.createElement('button');
+      noBtn.className = 'btn btn-secondary bli-edit-cancel';
+      noBtn.textContent = 'No';
+      noBtn.onclick = function () { cancelDeleteBli(); };
+
+      confirmRow.appendChild(confirmLabel);
+      confirmRow.appendChild(yesBtn);
+      confirmRow.appendChild(noBtn);
+      li.appendChild(confirmRow);
+    }
+
+    // If this item is being edited inline, show input instead of title
+    if (isAdmin && editingBliIndex === idx) {
+      li.classList.add('bli-editing');
+      title.classList.add('hidden');
+
+      var editRow = document.createElement('span');
+      editRow.className = 'bli-edit-inline';
+
+      var editInput = document.createElement('input');
+      editInput.type = 'text';
+      editInput.className = 'bli-edit-input';
+      editInput.value = item.title;
+      editInput.maxLength = 200;
+
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary bli-edit-save';
+      saveBtn.textContent = '✓';
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn btn-secondary bli-edit-cancel';
+      cancelBtn.textContent = '✕';
+
+      (function (i, inp) {
+        saveBtn.onclick = function () { submitEditBli(i, inp.value); };
+        cancelBtn.onclick = function () { cancelEditBli(); };
+        editInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); submitEditBli(i, inp.value); }
+          if (e.key === 'Escape') { cancelEditBli(); }
+        });
+      }(idx, editInput));
+
+      editRow.appendChild(editInput);
+      editRow.appendChild(saveBtn);
+      editRow.appendChild(cancelBtn);
+      li.insertBefore(editRow, title.nextSibling);
+
+      setTimeout(function () { editInput.focus(); editInput.select(); }, 0);
+    }
+
     list.appendChild(li);
   });
+}
+
+function renderBacklogInline() {
+  if (lastState) renderBacklog(lastState);
 }
 
 function selectBli(index) {
@@ -360,6 +471,52 @@ function selectBli(index) {
 function markBliDone(index) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ action: 'mark_bli_done', index: index }));
+}
+
+function addBliInRoom() {
+  var input = document.getElementById('bli-room-input');
+  var title = input.value.trim();
+  if (!title) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'add_bli', title: title }));
+  input.value = '';
+  input.focus();
+}
+
+function startEditBli(index) {
+  confirmingDeleteBli = null;
+  editingBliIndex = index;
+  renderBacklogInline();
+}
+
+function submitEditBli(index, value) {
+  var title = value.trim();
+  if (!title) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  editingBliIndex = null;
+  ws.send(JSON.stringify({ action: 'edit_bli', index: index, title: title }));
+}
+
+function cancelEditBli() {
+  editingBliIndex = null;
+  renderBacklogInline();
+}
+
+function confirmDeleteBli(index) {
+  editingBliIndex = null;
+  confirmingDeleteBli = index;
+  renderBacklogInline();
+}
+
+function cancelDeleteBli() {
+  confirmingDeleteBli = null;
+  renderBacklogInline();
+}
+
+function deleteBli(index) {
+  confirmingDeleteBli = null;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'delete_bli', index: index }));
 }
 
 function syncStory(state) {

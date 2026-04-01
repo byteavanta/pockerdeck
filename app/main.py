@@ -197,6 +197,39 @@ async def websocket_endpoint(
                         rooms[room_id]["users"][u]["vote"] = None
                     await manager.broadcast(room_id, build_state(room_id))
 
+            elif action == "add_bli":
+                if is_admin:
+                    title = str(data.get("title", "")).strip()[:200]
+                    backlog = rooms[room_id].get("backlog", [])
+                    if title and len(backlog) < 50:
+                        backlog.append({"title": title, "done": False})
+                        await manager.broadcast(room_id, build_state(room_id))
+
+            elif action == "edit_bli":
+                if is_admin:
+                    idx = data.get("index")
+                    title = str(data.get("title", "")).strip()[:200]
+                    backlog = rooms[room_id].get("backlog", [])
+                    if title and isinstance(idx, int) and 0 <= idx < len(backlog):
+                        backlog[idx]["title"] = title
+                        if rooms[room_id].get("active_bli") == idx:
+                            rooms[room_id]["story"] = title
+                        await manager.broadcast(room_id, build_state(room_id))
+
+            elif action == "delete_bli":
+                if is_admin:
+                    idx = data.get("index")
+                    backlog = rooms[room_id].get("backlog", [])
+                    if isinstance(idx, int) and 0 <= idx < len(backlog):
+                        backlog.pop(idx)
+                        active = rooms[room_id].get("active_bli")
+                        if active is not None:
+                            if active == idx:
+                                rooms[room_id]["active_bli"] = None
+                            elif active > idx:
+                                rooms[room_id]["active_bli"] = active - 1
+                        await manager.broadcast(room_id, build_state(room_id))
+
             elif action == "mark_bli_done":
                 if is_admin:
                     idx = data.get("index")
