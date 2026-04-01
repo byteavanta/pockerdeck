@@ -1,3 +1,11 @@
+---
+name: General issue
+about: Report a bug or request a feature
+title: ""
+labels: ""
+assignees: ""
+---
+
 ##  Bug Report /  Feature Request
 
 ### 📌 Description
