@@ -79,7 +79,7 @@ def build_state(room_id: str) -> dict:
 
 @app.get("/")
 async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "version": APP_VERSION})
+    return templates.TemplateResponse(request, "index.html", context={"version": APP_VERSION})
 
 
 @app.post("/create-room")
@@ -127,9 +127,9 @@ async def room_page(request: Request, room_id: str, creator: str = Query(default
         return RedirectResponse(url="/")
     room = rooms[room_id]
     return templates.TemplateResponse(
+        request,
         "room.html",
-        {
-            "request": request,
+        context={
             "room_id": room_id,
             "version": APP_VERSION,
             "is_creator": creator == "1",
