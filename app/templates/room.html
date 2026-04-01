@@ -6,8 +6,15 @@
   <title>PockerDeck</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="stylesheet" href="/static/css/style.css" />
+  <script>
+    (function() {
+      var t = localStorage.getItem('pockerdeck-theme');
+      if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+  </script>
 </head>
 <body>
+  <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme" aria-label="Toggle theme">🌙</button>
 
   <!-- ── Name entry modal (visible by default; hidden by JS for returning users) ── -->
   <div id="name-modal" class="modal-overlay">
@@ -128,6 +135,24 @@
     const ROOM_ID = "{{ room_id }}";
     const IS_CREATOR = {{ 'true' if is_creator else 'false' }};
     const CARDS = {{ cards | tojson }};
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var isDark = html.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        html.removeAttribute('data-theme');
+        localStorage.setItem('pockerdeck-theme', 'light');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        localStorage.setItem('pockerdeck-theme', 'dark');
+      }
+      syncThemeIcon();
+    }
+    function syncThemeIcon() {
+      var btn = document.querySelector('.theme-toggle');
+      if (btn) btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙';
+    }
+    syncThemeIcon();
   </script>
   <script src="/static/js/room.js"></script>
 </body>
