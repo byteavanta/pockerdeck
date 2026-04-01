@@ -935,7 +935,7 @@ body {
   position: fixed;
   top: 1rem;
   right: 1rem;
-  z-index: 900;
+  z-index: 1100;
   background: white;
   border: 2px solid #e2e8f0;
   border-radius: 50%;
