@@ -503,6 +503,7 @@ function cancelEditBli() {
 }
 
 function confirmDeleteBli(index) {
+  editingBliIndex = null;
   confirmingDeleteBli = index;
   renderBacklogInline();
 }
