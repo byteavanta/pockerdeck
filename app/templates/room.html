@@ -53,10 +53,15 @@
       </div>
     </div>
 
-    <!-- Backlog panel (shown when room has items) -->
-    <div id="backlog-panel" class="panel hidden">
+    <!-- Backlog panel -->
+    <div id="backlog-panel" class="panel">
       <div class="panel-title">Backlog</div>
       <ul id="backlog-list" class="backlog-list"></ul>
+      <p id="backlog-empty" class="empty-state hidden">No backlog items yet</p>
+      <div id="backlog-add-row" class="backlog-add-row hidden">
+        <input type="text" id="bli-room-input" placeholder="Add a backlog item…" maxlength="200" autocomplete="off" />
+        <button type="button" onclick="addBliInRoom()" class="btn btn-secondary">Add</button>
+      </div>
     </div>
 
     <!-- Story / Task description -->

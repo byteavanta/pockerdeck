@@ -822,6 +822,63 @@ body {
   white-space: nowrap;
 }
 
+.backlog-add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.backlog-add-row input {
+  flex: 1;
+  padding: 0.55rem 0.9rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+.backlog-add-row input:focus { border-color: #4f46e5; }
+
+.bli-actions {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: 0.25rem;
+  flex-shrink: 0;
+}
+
+/* Inline edit */
+.bli-edit-inline {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex: 1;
+}
+.bli-edit-input {
+  flex: 1;
+  padding: 0.3rem 0.6rem;
+  border: 2px solid #a5b4fc;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.bli-edit-input:focus { border-color: #4f46e5; }
+.bli-edit-save,
+.bli-edit-cancel {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  min-width: 28px;
+}
+.bli-edit-save:hover,
+.bli-edit-cancel:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+.bli-editing .bli-tag,
+.bli-editing .bli-vote-btn { display: none; }
+
 /* ══════════════════════════════════════════════════
    VERSION FOOTER
 ══════════════════════════════════════════════════ */
