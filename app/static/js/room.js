@@ -485,6 +485,7 @@ function addBliInRoom() {
 }
 
 function startEditBli(index) {
+  confirmingDeleteBli = null;
   editingBliIndex = index;
   renderBacklogInline();
 }
