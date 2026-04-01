@@ -879,6 +879,36 @@ body {
 .bli-editing .bli-tag,
 .bli-editing .bli-vote-btn { display: none; }
 
+/* Inline delete confirmation */
+.bli-delete-confirm {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin-left: auto;
+}
+.bli-delete-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #dc2626;
+}
+.btn-danger-sm {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+.btn-danger-sm:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  transform: none;
+  box-shadow: none;
+}
+.bli-confirming-delete .bli-actions { display: none; }
+.bli-confirming-delete .bli-tag,
+.bli-confirming-delete .bli-vote-btn { display: none; }
+
 /* ══════════════════════════════════════════════════
    VERSION FOOTER
 ══════════════════════════════════════════════════ */

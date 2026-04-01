@@ -5,6 +5,7 @@ let myVote = null;
 let shouldReconnect = true;
 let editingBliIndex = null;
 let lastState = null;
+let confirmingDeleteBli = null;
 
 window.addEventListener('DOMContentLoaded', function () {
   document.getElementById('room-id-text').textContent = ROOM_ID;
@@ -379,12 +380,41 @@ function renderBacklog(state) {
       delBtn.title = 'Delete';
       delBtn.textContent = '🗑';
       (function (i) {
-        delBtn.onclick = function () { deleteBli(i); };
+        delBtn.onclick = function () { confirmDeleteBli(i); };
       }(idx));
 
       actions.appendChild(editBtn);
       actions.appendChild(delBtn);
       li.appendChild(actions);
+    }
+
+    // Inline delete confirmation
+    if (isAdmin && confirmingDeleteBli === idx) {
+      li.classList.add('bli-confirming-delete');
+
+      var confirmRow = document.createElement('div');
+      confirmRow.className = 'bli-delete-confirm';
+
+      var confirmLabel = document.createElement('span');
+      confirmLabel.className = 'bli-delete-label';
+      confirmLabel.textContent = 'Delete?';
+
+      var yesBtn = document.createElement('button');
+      yesBtn.className = 'btn btn-danger-sm';
+      yesBtn.textContent = 'Yes';
+      (function (i) {
+        yesBtn.onclick = function () { deleteBli(i); };
+      }(idx));
+
+      var noBtn = document.createElement('button');
+      noBtn.className = 'btn btn-secondary bli-edit-cancel';
+      noBtn.textContent = 'No';
+      noBtn.onclick = function () { cancelDeleteBli(); };
+
+      confirmRow.appendChild(confirmLabel);
+      confirmRow.appendChild(yesBtn);
+      confirmRow.appendChild(noBtn);
+      li.appendChild(confirmRow);
     }
 
     // If this item is being edited inline, show input instead of title
@@ -472,8 +502,18 @@ function cancelEditBli() {
   renderBacklogInline();
 }
 
+function confirmDeleteBli(index) {
+  confirmingDeleteBli = index;
+  renderBacklogInline();
+}
+
+function cancelDeleteBli() {
+  confirmingDeleteBli = null;
+  renderBacklogInline();
+}
+
 function deleteBli(index) {
-  if (!confirm('Delete this backlog item?')) return;
+  confirmingDeleteBli = null;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ action: 'delete_bli', index: index }));
 }
