@@ -45,7 +45,7 @@
           <span>👁 Viewer</span>
         </label>
       </div>
-      <button onclick="submitName()" class="btn btn-primary btn-full">Join →</button>
+      <button onclick="app.submitName()" class="btn btn-primary btn-full">Join →</button>
     </div>
   </div>
 
@@ -60,7 +60,7 @@
       </div>
       <div class="header-right">
         <span id="conn-status" class="status-badge disconnected">Connecting…</span>
-        <button id="copy-btn" onclick="copyLink()" class="btn btn-secondary">📋 Copy Link</button>
+        <button id="copy-btn" onclick="app.copyLink()" class="btn btn-secondary">📋 Copy Link</button>
       </div>
     </div>
 
@@ -71,7 +71,7 @@
       <p id="backlog-empty" class="empty-state hidden">No backlog items yet</p>
       <div id="backlog-add-row" class="backlog-add-row hidden">
         <input type="text" id="bli-room-input" placeholder="Add a backlog item…" maxlength="200" autocomplete="off" />
-        <button type="button" onclick="addBliInRoom()" class="btn btn-secondary">Add</button>
+        <button type="button" onclick="app.addBliInRoom()" class="btn btn-secondary">Add</button>
       </div>
     </div>
 
@@ -84,7 +84,7 @@
           rows="2"
           placeholder="Describe the story or task you're estimating (press Enter to share)…"
         ></textarea>
-        <button id="story-btn" onclick="setStory(this)" class="btn btn-secondary">Update</button>
+        <button id="story-btn" onclick="app.setStory(this)" class="btn btn-secondary">Update</button>
       </div>
     </div>
 
@@ -122,10 +122,10 @@
 
     <!-- Action buttons -->
     <div class="controls-row">
-      <button id="reveal-btn" onclick="revealVotes()" class="btn btn-primary btn-large">
+      <button id="reveal-btn" onclick="app.revealVotes()" class="btn btn-primary btn-large">
         👁 Reveal Votes
       </button>
-      <button id="reset-btn" onclick="newRound()" class="btn btn-success btn-large hidden">
+      <button id="reset-btn" onclick="app.newRound()" class="btn btn-success btn-large hidden">
         🔄 New Round
       </button>
     </div>
@@ -162,6 +162,10 @@
     }
     syncThemeIcon();
   </script>
-  <script src="/static/js/room.js"></script>
+  <script src="/static/js/room.js?v={{ version }}"></script>
+  <script>
+    var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS);
+    app.init();
+  </script>
 </body>
 </html>
