@@ -1,3 +1,5 @@
+import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, Form, WebSocket, WebSocketDisconnect, Request, Query
@@ -7,6 +9,10 @@ from fastapi.responses import RedirectResponse
 
 from models import DEFAULT_CARDS, BacklogItem, Participant, Room
 from managers import RoomManager, ConnectionManager
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
+logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("pockerdeck")
 
 app = FastAPI()
 
@@ -31,6 +37,7 @@ async def home(request: Request):
 @app.post("/create-room")
 async def create_room(backlog: str = Form(default=""), cards: str = Form(default="")):
     room = room_manager.create_room(backlog=backlog, cards=cards)
+    logger.info("Room created: %s", room.id)
     return RedirectResponse(url=f"/room/{room.id}?creator=1", status_code=303)
 
 
@@ -63,6 +70,7 @@ async def websocket_endpoint(
 ):
     room = room_manager.get_room(room_id)
     if room is None:
+        logger.warning("WebSocket connection to nonexistent room: %s", room_id)
         await websocket.close(code=4004)
         return
 
@@ -70,6 +78,7 @@ async def websocket_endpoint(
 
     room.add_participant(user_name, role)
     await conn_manager.connect(room_id, user_name, websocket)
+    logger.info("User '%s' joined room %s (role=%s)", user_name, room_id, role)
     await conn_manager.broadcast(room_id, room.build_state())
 
     try:
@@ -83,6 +92,7 @@ async def websocket_endpoint(
                 continue
 
             action = data.get("action")
+            logger.debug("Room %s: user '%s' action=%s", room_id, user_name, action)
             is_admin = room.admin == user_name
             changed = False
 
@@ -132,6 +142,7 @@ async def websocket_endpoint(
                 await conn_manager.broadcast(room_id, room.build_state())
 
     except WebSocketDisconnect:
+        logger.info("User '%s' left room %s", user_name, room_id)
         conn_manager.disconnect(room_id, user_name)
         room.remove_participant(user_name)
         await conn_manager.broadcast(room_id, room.build_state())

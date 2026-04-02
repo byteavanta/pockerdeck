@@ -1,10 +1,13 @@
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from models.constants import DEFAULT_CARDS
 from models.backlog_item import BacklogItem
 from models.participant import Participant
+
+logger = logging.getLogger("pockerdeck.room")
 
 
 @dataclass
@@ -44,6 +47,7 @@ class Room:
                     card_list = parsed
             except Exception:
                 pass
+        logger.debug("Room.create id=%s backlog_items=%d cards=%d", room_id, len(items), len(card_list))
         return cls(id=room_id, backlog=items, cards=card_list)
 
     def add_participant(self, name: str, role: str) -> Participant:
@@ -54,10 +58,12 @@ class Room:
             self.admin = name
         p = Participant(name=name, role=role)
         self.participants[name] = p
+        logger.debug("Room %s: added participant '%s' role=%s", self.id, name, role)
         return p
 
     def remove_participant(self, name: str) -> None:
         self.participants.pop(name, None)
+        logger.debug("Room %s: removed participant '%s'", self.id, name)
         if self.admin == name:
             self.promote_next_admin()
 
@@ -69,14 +75,17 @@ class Room:
         if promoted:
             self.admin = promoted
             self.participants[promoted].role = "admin"
+            logger.debug("Room %s: promoted '%s' to admin", self.id, promoted)
         else:
             self.admin = None
+            logger.debug("Room %s: no eligible admin found", self.id)
 
     def vote(self, user_name: str, value: str) -> bool:
         p = self.participants.get(user_name)
         if not p or p.role not in ("admin", "user"):
             return False
         p.vote = str(value)[:8]
+        logger.debug("Room %s: '%s' voted", self.id, user_name)
         return True
 
     def reveal(self, user_name: str) -> bool:
@@ -84,6 +93,7 @@ class Room:
         if not p or p.role not in ("admin", "user"):
             return False
         self.revealed = True
+        logger.debug("Room %s: votes revealed by '%s'", self.id, user_name)
         return True
 
     def reset(self, user_name: str, story: str = "") -> bool:
@@ -94,6 +104,7 @@ class Room:
         self.story = str(story)[:500]
         for participant in self.participants.values():
             participant.vote = None
+        logger.debug("Room %s: round reset by '%s'", self.id, user_name)
         return True
 
     def set_story(self, user_name: str, story: str) -> bool:
@@ -108,6 +119,7 @@ class Room:
         if not title or len(self.backlog) >= 50:
             return False
         self.backlog.append(BacklogItem(title=title))
+        logger.debug("Room %s: backlog item added '%s'", self.id, title)
         return True
 
     def edit_backlog_item(self, index: int, title: str) -> bool:
@@ -152,6 +164,7 @@ class Room:
         p = self.participants.pop(old_name)
         p.name = new_name
         self.participants[new_name] = p
+        logger.debug("Room %s: renamed '%s' -> '%s'", self.id, old_name, new_name)
         if self.admin == old_name:
             self.admin = new_name
         return True
