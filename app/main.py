@@ -15,6 +15,7 @@ templates = Jinja2Templates(directory="templates")
 
 _VERSION_FILE = Path(__file__).parent / "VERSION"
 APP_VERSION = _VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "unknown"
+DOCS_URL = "https://byteavanta.github.io/pockerdeck-doc/"
 
 rooms: Dict[str, dict] = {}
 
@@ -79,7 +80,7 @@ def build_state(room_id: str) -> dict:
 
 @app.get("/")
 async def home(request: Request):
-    return templates.TemplateResponse(request, "index.html", context={"version": APP_VERSION})
+    return templates.TemplateResponse(request, "index.html", context={"version": APP_VERSION, "docs_url": DOCS_URL})
 
 
 @app.post("/create-room")
@@ -132,6 +133,7 @@ async def room_page(request: Request, room_id: str, creator: str = Query(default
         context={
             "room_id": room_id,
             "version": APP_VERSION,
+            "docs_url": DOCS_URL,
             "is_creator": creator == "1",
             "cards": room.get("cards", DEFAULT_CARDS),
         },
