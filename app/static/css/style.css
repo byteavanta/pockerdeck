@@ -935,9 +935,18 @@ body {
   transition: opacity 0.2s;
 }
 
-.footer-docs-link:hover {
+.footer-docs-link:hover,
+.footer-docs-link:focus,
+.footer-docs-link:focus-visible {
   opacity: 1;
   text-decoration: underline;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.footer-docs-link:hover:not(:focus):not(:focus-visible) {
+  outline: none;
 }
 
 /* ══════════════════════════════════════════════════
