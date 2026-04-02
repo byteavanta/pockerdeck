@@ -49,12 +49,6 @@ assignees: ""
 
 ---
 
-### 🧠 Additional Context
-
-<!-- Any other context, links, or references -->
-
----
-
 ### 🙋 Possible Solution (optional)
 
 <!-- Suggest a fix or reason for the bug if you have one -->
