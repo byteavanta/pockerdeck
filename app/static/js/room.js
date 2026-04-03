@@ -296,7 +296,7 @@ class RoomApp {
 
     var numeric = Object.values(state.users)
       .filter(function (info) {
-        return info.role !== 'viewer' && info.vote !== null && info.vote !== undefined && !isNaN(parseFloat(info.vote));
+        return info.role !== 'viewer' && info.vote !== null && info.vote !== undefined && !isNaN(Number(info.vote));
       })
       .map(function (info) { return Number(info.vote); });
 
