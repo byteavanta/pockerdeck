@@ -526,26 +526,36 @@ class RoomApp {
     this.send({ action: 'set_story', story: story });
 
     if (!btn) return;
-    var orig = btn.innerHTML;
+    if (btn._flashTimer) {
+      clearTimeout(btn._flashTimer);
+    } else {
+      btn._origHTML = btn.innerHTML;
+    }
     btn.innerHTML = '✓ Updated';
     btn.classList.add('btn-success-flash');
-    setTimeout(function () {
-      btn.innerHTML = orig;
+    btn._flashTimer = setTimeout(function () {
+      btn.innerHTML = btn._origHTML;
       btn.classList.remove('btn-success-flash');
+      btn._flashTimer = null;
     }, 2000);
   }
 
   copyLink() {
     var btn = document.getElementById('copy-btn');
-    var orig = btn.innerHTML;
     var cleanUrl = location.origin + location.pathname;
 
     function showSuccess() {
+      if (btn._flashTimer) {
+        clearTimeout(btn._flashTimer);
+      } else {
+        btn._origHTML = btn.innerHTML;
+      }
       btn.innerHTML = '✓ Copied!';
       btn.classList.add('btn-success-flash');
-      setTimeout(function () {
-        btn.innerHTML = orig;
+      btn._flashTimer = setTimeout(function () {
+        btn.innerHTML = btn._origHTML;
         btn.classList.remove('btn-success-flash');
+        btn._flashTimer = null;
       }, 2000);
     }
 
