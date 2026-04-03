@@ -296,7 +296,7 @@ class RoomApp {
 
     var numeric = Object.values(state.users)
       .filter(function (info) {
-        return info.role !== 'viewer' && info.vote !== null && info.vote !== undefined && !isNaN(Number(info.vote));
+        return info.role !== 'viewer' && info.vote !== null && info.vote !== undefined && !isNaN(parseFloat(info.vote));
       })
       .map(function (info) { return Number(info.vote); });
 
@@ -492,10 +492,16 @@ class RoomApp {
   // ── Actions ──────────────────────────────────────────────────────────────
 
   vote(value) {
-    this.myVote = value;
-    this.send({ action: 'vote', value: value });
+    if (this.myVote === value) {
+      this.myVote = null;
+      this.send({ action: 'vote', value: null });
+    } else {
+      this.myVote = value;
+      this.send({ action: 'vote', value: value });
+    }
+    var myVote = this.myVote;
     document.querySelectorAll('.vote-card').forEach(function (card) {
-      card.classList.toggle('selected', card.dataset.value === value);
+      card.classList.toggle('selected', card.dataset.value === myVote);
     });
   }
 

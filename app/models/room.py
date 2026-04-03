@@ -84,7 +84,10 @@ class Room:
         p = self.participants.get(user_name)
         if not p or p.role not in ("admin", "user"):
             return False
-        p.vote = str(value)[:8]
+        if value is None or value == "":
+            p.vote = None
+        else:
+            p.vote = str(value)[:8]
         logger.debug("Room %s: '%s' voted", self.id, user_name)
         return True
 
