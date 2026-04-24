@@ -71,67 +71,69 @@ validate_inputs() {
 }
 
 # --------------------
-# Get current image ID for the service
+# Get the image name for the service from the compose file
 # --------------------
-get_current_image_id() {
-    docker compose -f "$COMPOSE_FILE" images -q "$SERVICE_NAME" 2>/dev/null || echo ""
+get_service_image() {
+    docker compose -f "$COMPOSE_FILE" config --format json 2>/dev/null \
+        | grep -o "\"image\":\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/"image":"//;s/"//' || echo ""
 }
 
 # --------------------
-# Pull the latest image
+# Stop the service and remove the container
+# --------------------
+stop_and_remove_container() {
+    log_info "Stopping service '$SERVICE_NAME'..."
+    docker compose -f "$COMPOSE_FILE" stop "$SERVICE_NAME" 2>/dev/null || true
+    log_success "Service stopped."
+
+    log_info "Removing container for service '$SERVICE_NAME'..."
+    docker compose -f "$COMPOSE_FILE" rm -f "$SERVICE_NAME" 2>/dev/null || true
+    log_success "Container removed."
+}
+
+# --------------------
+# Delete the old image to force a fresh pull
+# --------------------
+delete_old_image() {
+    log_info "Resolving image for service '$SERVICE_NAME'..."
+
+    # Get the image name from docker compose config
+    IMAGE_NAME=$(get_service_image)
+
+    # Fallback: try to get the image from currently running/stopped containers
+    if [[ -z "$IMAGE_NAME" ]]; then
+        IMAGE_NAME=$(docker compose -f "$COMPOSE_FILE" images "$SERVICE_NAME" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | head -1)
+    fi
+
+    if [[ -n "$IMAGE_NAME" && "$IMAGE_NAME" != ":" ]]; then
+        log_info "Deleting old image: $IMAGE_NAME"
+        if docker rmi -f "$IMAGE_NAME" 2>/dev/null; then
+            log_success "Old image '$IMAGE_NAME' deleted."
+        else
+            log_warning "Could not delete image '$IMAGE_NAME' (may not exist locally yet)."
+        fi
+    else
+        log_warning "Could not determine image name for service '$SERVICE_NAME'. Skipping image deletion."
+    fi
+}
+
+# --------------------
+# Pull a completely fresh image
 # --------------------
 pull_image() {
-    log_info "Pulling latest image for service '$SERVICE_NAME'..."
-
-    # Capture the image ID before pulling
-    OLD_IMAGE_ID=$(get_current_image_id)
-    log_info "Current image ID: ${OLD_IMAGE_ID:-<none>}"
-
+    log_info "Pulling fresh image for service '$SERVICE_NAME'..."
     if docker compose -f "$COMPOSE_FILE" pull "$SERVICE_NAME"; then
-        log_success "Image pulled successfully."
+        log_success "Fresh image pulled successfully."
     else
         log_error "Failed to pull image for service '$SERVICE_NAME'."
         exit 1
     fi
-
-    # Capture the image ID after pulling
-    NEW_IMAGE_ID=$(get_current_image_id)
-    log_info "New image ID:     ${NEW_IMAGE_ID:-<none>}"
-
-    if [[ "$OLD_IMAGE_ID" == "$NEW_IMAGE_ID" && -n "$OLD_IMAGE_ID" ]]; then
-        log_warning "Image has not changed (same digest). Container will still be force-recreated."
-    else
-        log_success "New image detected!"
-    fi
 }
 
 # --------------------
-# Stop the service
-# --------------------
-stop_service() {
-    log_info "Stopping service '$SERVICE_NAME'..."
-    if docker compose -f "$COMPOSE_FILE" stop "$SERVICE_NAME"; then
-        log_success "Service stopped."
-    else
-        log_error "Failed to stop service '$SERVICE_NAME'."
-        exit 1
-    fi
-}
-
-# --------------------
-# Remove the old container so it is recreated from the new image
-# --------------------
-remove_old_container() {
-    log_info "Removing old container for service '$SERVICE_NAME'..."
-    if docker compose -f "$COMPOSE_FILE" rm -f "$SERVICE_NAME" 2>/dev/null; then
-        log_success "Old container removed."
-    else
-        log_warning "No existing container to remove (non-critical)."
-    fi
-}
-
-# --------------------
-# Start the service (force-recreate to pick up the new image)
+# Start the service with the new image
 # --------------------
 start_service() {
     log_info "Starting service '$SERVICE_NAME' with the new image..."
@@ -144,12 +146,12 @@ start_service() {
 }
 
 # --------------------
-# Remove old images
+# Remove dangling images
 # --------------------
 cleanup_old_images() {
     log_info "Cleaning up dangling images..."
     if docker image prune -f; then
-        log_success "Old images removed."
+        log_success "Dangling images removed."
     else
         log_warning "Image cleanup failed (non-critical)."
     fi
@@ -174,9 +176,9 @@ main() {
 
     check_dependencies
     validate_inputs
+    stop_and_remove_container
+    delete_old_image
     pull_image
-    stop_service
-    remove_old_container
     start_service
     cleanup_old_images
     show_status
