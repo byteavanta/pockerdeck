@@ -71,15 +71,37 @@ validate_inputs() {
 }
 
 # --------------------
+# Get current image ID for the service
+# --------------------
+get_current_image_id() {
+    docker compose -f "$COMPOSE_FILE" images -q "$SERVICE_NAME" 2>/dev/null || echo ""
+}
+
+# --------------------
 # Pull the latest image
 # --------------------
 pull_image() {
     log_info "Pulling latest image for service '$SERVICE_NAME'..."
+
+    # Capture the image ID before pulling
+    OLD_IMAGE_ID=$(get_current_image_id)
+    log_info "Current image ID: ${OLD_IMAGE_ID:-<none>}"
+
     if docker compose -f "$COMPOSE_FILE" pull "$SERVICE_NAME"; then
         log_success "Image pulled successfully."
     else
         log_error "Failed to pull image for service '$SERVICE_NAME'."
         exit 1
+    fi
+
+    # Capture the image ID after pulling
+    NEW_IMAGE_ID=$(get_current_image_id)
+    log_info "New image ID:     ${NEW_IMAGE_ID:-<none>}"
+
+    if [[ "$OLD_IMAGE_ID" == "$NEW_IMAGE_ID" && -n "$OLD_IMAGE_ID" ]]; then
+        log_warning "Image has not changed (same digest). Container will still be force-recreated."
+    else
+        log_success "New image detected!"
     fi
 }
 
@@ -97,12 +119,24 @@ stop_service() {
 }
 
 # --------------------
-# Start the service
+# Remove the old container so it is recreated from the new image
+# --------------------
+remove_old_container() {
+    log_info "Removing old container for service '$SERVICE_NAME'..."
+    if docker compose -f "$COMPOSE_FILE" rm -f "$SERVICE_NAME" 2>/dev/null; then
+        log_success "Old container removed."
+    else
+        log_warning "No existing container to remove (non-critical)."
+    fi
+}
+
+# --------------------
+# Start the service (force-recreate to pick up the new image)
 # --------------------
 start_service() {
     log_info "Starting service '$SERVICE_NAME' with the new image..."
-    if docker compose -f "$COMPOSE_FILE" up -d --no-deps "$SERVICE_NAME"; then
-        log_success "Service '$SERVICE_NAME' started successfully."
+    if docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate "$SERVICE_NAME"; then
+        log_success "Service '$SERVICE_NAME' started successfully with the new image."
     else
         log_error "Failed to start service '$SERVICE_NAME'."
         exit 1
@@ -142,6 +176,7 @@ main() {
     validate_inputs
     pull_image
     stop_service
+    remove_old_container
     start_service
     cleanup_old_images
     show_status
