@@ -94,7 +94,7 @@ stop_and_remove_container() {
 }
 
 # --------------------
-# Delete the old image to force a fresh pull
+# Delete only the :latest tagged image to force a fresh pull
 # --------------------
 delete_old_image() {
     log_info "Resolving image for service '$SERVICE_NAME'..."
@@ -108,11 +108,15 @@ delete_old_image() {
     fi
 
     if [[ -n "$IMAGE_NAME" && "$IMAGE_NAME" != ":" ]]; then
-        log_info "Deleting old image: $IMAGE_NAME"
-        if docker rmi -f "$IMAGE_NAME" 2>/dev/null; then
-            log_success "Old image '$IMAGE_NAME' deleted."
+        # Strip any existing tag and force :latest
+        IMAGE_BASE="${IMAGE_NAME%%:*}"
+        LATEST_IMAGE="${IMAGE_BASE}:latest"
+
+        log_info "Deleting latest image: $LATEST_IMAGE"
+        if docker rmi -f "$LATEST_IMAGE" 2>/dev/null; then
+            log_success "Image '$LATEST_IMAGE' deleted."
         else
-            log_warning "Could not delete image '$IMAGE_NAME' (may not exist locally yet)."
+            log_warning "Could not delete image '$LATEST_IMAGE' (may not exist locally yet)."
         fi
     else
         log_warning "Could not determine image name for service '$SERVICE_NAME'. Skipping image deletion."
