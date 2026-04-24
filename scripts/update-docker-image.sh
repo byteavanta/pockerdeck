@@ -1,9 +1,12 @@
 #!/bin/bash
 
 # =============================================================================
-# Docker Compose Image Updater
+# Docker Compose Image Updater (for build-based services)
 # Usage: ./update-docker-image.sh [service_name] [compose_file]
-# Example: ./update-docker-image.sh myapp docker-compose.yml
+# Example: ./update-docker-image.sh web docker-compose.yml
+#
+# Stops the service, deletes the locally built :latest image,
+# rebuilds with --no-cache, and starts fresh.
 # =============================================================================
 
 set -e  # Exit on error
@@ -71,13 +74,21 @@ validate_inputs() {
 }
 
 # --------------------
-# Get the image name for the service from the compose file
+# Resolve the built image name (<project>-<service>)
 # --------------------
-get_service_image() {
-    docker compose -f "$COMPOSE_FILE" config --format json 2>/dev/null \
-        | grep -o "\"image\":\"[^\"]*\"" \
-        | head -1 \
-        | sed 's/"image":"//;s/"//' || echo ""
+get_built_image_name() {
+    # Docker Compose names built images as <project>-<service>
+    # Get the project name from docker compose
+    local PROJECT_NAME
+    PROJECT_NAME=$(docker compose -f "$COMPOSE_FILE" config --format json 2>/dev/null \
+        | grep -o '"name":"[^"]*"' | head -1 | sed 's/"name":"//;s/"//') || true
+
+    # Fallback: derive project name from directory name (same as Docker Compose default)
+    if [[ -z "$PROJECT_NAME" ]]; then
+        PROJECT_NAME=$(basename "$(cd "$(dirname "$COMPOSE_FILE")" && pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g')
+    fi
+
+    echo "${PROJECT_NAME}-${SERVICE_NAME}"
 }
 
 # --------------------
@@ -94,25 +105,15 @@ stop_and_remove_container() {
 }
 
 # --------------------
-# Delete only the :latest tagged image to force a fresh pull
+# Delete the built :latest image to force a clean rebuild
 # --------------------
 delete_old_image() {
-    log_info "Resolving image for service '$SERVICE_NAME'..."
+    local IMAGE_NAME
+    IMAGE_NAME=$(get_built_image_name)
 
-    # Get the image name from docker compose config
-    IMAGE_NAME=$(get_service_image)
-
-    # Fallback: try to get the image from currently running/stopped containers
-    if [[ -z "$IMAGE_NAME" ]]; then
-        IMAGE_NAME=$(docker compose -f "$COMPOSE_FILE" images "$SERVICE_NAME" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | head -1)
-    fi
-
-    if [[ -n "$IMAGE_NAME" && "$IMAGE_NAME" != ":" ]]; then
-        # Strip any existing tag and force :latest
-        IMAGE_BASE="${IMAGE_NAME%%:*}"
-        LATEST_IMAGE="${IMAGE_BASE}:latest"
-
-        log_info "Deleting latest image: $LATEST_IMAGE"
+    if [[ -n "$IMAGE_NAME" ]]; then
+        local LATEST_IMAGE="${IMAGE_NAME}:latest"
+        log_info "Deleting image: $LATEST_IMAGE"
         if docker rmi -f "$LATEST_IMAGE" 2>/dev/null; then
             log_success "Image '$LATEST_IMAGE' deleted."
         else
@@ -124,14 +125,14 @@ delete_old_image() {
 }
 
 # --------------------
-# Pull a completely fresh image
+# Rebuild the image from scratch (no cache)
 # --------------------
-pull_image() {
-    log_info "Pulling fresh image for service '$SERVICE_NAME'..."
-    if docker compose -f "$COMPOSE_FILE" pull "$SERVICE_NAME"; then
-        log_success "Fresh image pulled successfully."
+build_image() {
+    log_info "Building fresh image for service '$SERVICE_NAME' (--no-cache)..."
+    if docker compose -f "$COMPOSE_FILE" build --no-cache "$SERVICE_NAME"; then
+        log_success "Fresh image built successfully."
     else
-        log_error "Failed to pull image for service '$SERVICE_NAME'."
+        log_error "Failed to build image for service '$SERVICE_NAME'."
         exit 1
     fi
 }
@@ -182,7 +183,7 @@ main() {
     validate_inputs
     stop_and_remove_container
     delete_old_image
-    pull_image
+    build_image
     start_service
     cleanup_old_images
     show_status
