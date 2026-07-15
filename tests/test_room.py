@@ -91,10 +91,10 @@ class TestRoomParticipants:
         assert p2.role == "user"
         assert room.admin == "Alice"
 
-    def test_viewer_cannot_become_admin_first(self):
+    def test_first_joiner_always_becomes_admin_regardless_of_role(self):
         room = self._make_room()
         p = room.add_participant("Eve", "viewer")
-        # First user always becomes admin, overriding viewer
+        # First joiner is always forced to admin, even if they requested viewer
         assert p.role == "admin"
         assert room.admin == "Eve"
 
@@ -194,6 +194,18 @@ class TestRoomVoting:
         room = self._make_room_with_users()
         assert room.set_story("Eve", "Nope") is False
 
+    def test_vote_empty_value_clears_vote(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "5")
+        assert room.vote("Alice", "") is True
+        assert room.participants["Alice"].vote is None
+
+    def test_vote_none_value_clears_vote(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "5")
+        assert room.vote("Alice", None) is True
+        assert room.participants["Alice"].vote is None
+
 
 class TestRoomBacklog:
     def _make_room(self):
@@ -261,11 +273,21 @@ class TestRoomBacklog:
         room.delete_backlog_item(0)
         assert room.active_bli == 1
 
+    def test_delete_invalid_index(self):
+        room = self._make_room()
+        assert room.delete_backlog_item(0) is False
+        assert room.delete_backlog_item(-1) is False
+
     def test_mark_backlog_done(self):
         room = self._make_room()
         room.add_backlog_item("Story")
         assert room.mark_backlog_done(0) is True
         assert room.backlog[0].done is True
+
+    def test_mark_done_invalid_index(self):
+        room = self._make_room()
+        assert room.mark_backlog_done(0) is False
+        assert room.mark_backlog_done(-1) is False
 
     def test_mark_done_clears_active(self):
         room = self._make_room()
