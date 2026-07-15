@@ -1,9 +1,12 @@
 #!/bin/bash
 
 # =============================================================================
-# Docker Compose Image Updater
+# Docker Compose Image Updater (for build-based services)
 # Usage: ./update-docker-image.sh [service_name] [compose_file]
-# Example: ./update-docker-image.sh myapp docker-compose.yml
+# Example: ./update-docker-image.sh web docker-compose.yml
+#
+# Stops the service, deletes the locally built :latest image,
+# rebuilds with --no-cache, and starts fresh.
 # =============================================================================
 
 set -e  # Exit on error
@@ -71,38 +74,76 @@ validate_inputs() {
 }
 
 # --------------------
-# Pull the latest image
+# Resolve the built image name (<project>-<service>)
 # --------------------
-pull_image() {
-    log_info "Pulling latest image for service '$SERVICE_NAME'..."
-    if docker compose -f "$COMPOSE_FILE" pull "$SERVICE_NAME"; then
-        log_success "Image pulled successfully."
-    else
-        log_error "Failed to pull image for service '$SERVICE_NAME'."
-        exit 1
+get_built_image_name() {
+    # Docker Compose names built images as <project>-<service>
+    # Get the project name from docker compose
+    local PROJECT_NAME
+    PROJECT_NAME=$(docker compose -f "$COMPOSE_FILE" config --format json 2>/dev/null \
+        | grep -o '"name":"[^"]*"' | head -1 | sed 's/"name":"//;s/"//') || true
+
+    # Fallback: derive project name from directory name (same as Docker Compose default)
+    if [[ -z "$PROJECT_NAME" ]]; then
+        PROJECT_NAME=$(basename "$(cd "$(dirname "$COMPOSE_FILE")" && pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g')
     fi
+
+    echo "${PROJECT_NAME}-${SERVICE_NAME}"
 }
 
 # --------------------
-# Stop the service
+# Stop the service and remove the container
 # --------------------
-stop_service() {
+stop_and_remove_container() {
     log_info "Stopping service '$SERVICE_NAME'..."
-    if docker compose -f "$COMPOSE_FILE" stop "$SERVICE_NAME"; then
-        log_success "Service stopped."
+    docker compose -f "$COMPOSE_FILE" stop "$SERVICE_NAME" 2>/dev/null || true
+    log_success "Service stopped."
+
+    log_info "Removing container for service '$SERVICE_NAME'..."
+    docker compose -f "$COMPOSE_FILE" rm -f "$SERVICE_NAME" 2>/dev/null || true
+    log_success "Container removed."
+}
+
+# --------------------
+# Delete the built :latest image to force a clean rebuild
+# --------------------
+delete_old_image() {
+    local IMAGE_NAME
+    IMAGE_NAME=$(get_built_image_name)
+
+    if [[ -n "$IMAGE_NAME" ]]; then
+        local LATEST_IMAGE="${IMAGE_NAME}:latest"
+        log_info "Deleting image: $LATEST_IMAGE"
+        if docker rmi -f "$LATEST_IMAGE" 2>/dev/null; then
+            log_success "Image '$LATEST_IMAGE' deleted."
+        else
+            log_warning "Could not delete image '$LATEST_IMAGE' (may not exist locally yet)."
+        fi
     else
-        log_error "Failed to stop service '$SERVICE_NAME'."
+        log_warning "Could not determine image name for service '$SERVICE_NAME'. Skipping image deletion."
+    fi
+}
+
+# --------------------
+# Rebuild the image from scratch (no cache)
+# --------------------
+build_image() {
+    log_info "Building fresh image for service '$SERVICE_NAME' (--no-cache)..."
+    if docker compose -f "$COMPOSE_FILE" build --no-cache "$SERVICE_NAME"; then
+        log_success "Fresh image built successfully."
+    else
+        log_error "Failed to build image for service '$SERVICE_NAME'."
         exit 1
     fi
 }
 
 # --------------------
-# Start the service
+# Start the service with the new image
 # --------------------
 start_service() {
     log_info "Starting service '$SERVICE_NAME' with the new image..."
-    if docker compose -f "$COMPOSE_FILE" up -d --no-deps "$SERVICE_NAME"; then
-        log_success "Service '$SERVICE_NAME' started successfully."
+    if docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate "$SERVICE_NAME"; then
+        log_success "Service '$SERVICE_NAME' started successfully with the new image."
     else
         log_error "Failed to start service '$SERVICE_NAME'."
         exit 1
@@ -110,12 +151,12 @@ start_service() {
 }
 
 # --------------------
-# Remove old images
+# Remove dangling images
 # --------------------
 cleanup_old_images() {
     log_info "Cleaning up dangling images..."
     if docker image prune -f; then
-        log_success "Old images removed."
+        log_success "Dangling images removed."
     else
         log_warning "Image cleanup failed (non-critical)."
     fi
@@ -140,8 +181,9 @@ main() {
 
     check_dependencies
     validate_inputs
-    pull_image
-    stop_service
+    stop_and_remove_container
+    delete_old_image
+    build_image
     start_service
     cleanup_old_images
     show_status
