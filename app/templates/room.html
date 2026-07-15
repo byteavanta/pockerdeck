@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PockerDeck</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="stylesheet" href="/static/css/style.css" />
   <script>
@@ -11,14 +14,15 @@
       try {
         var t = localStorage.getItem('pockerdeck-theme');
         if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-      } catch (e) {
-        // If localStorage is unavailable or blocked, fall back to default (light) theme.
-      }
+      } catch (e) {}
     })();
   </script>
 </head>
 <body>
   <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme" aria-label="Toggle theme" aria-pressed="false">🌙</button>
+
+  <!-- Toast container -->
+  <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
   <!-- ── Name entry modal (visible by default; hidden by JS for returning users) ── -->
   <div id="name-modal" class="modal-overlay">
@@ -64,6 +68,21 @@
       </div>
     </div>
 
+    <!-- Timer panel (shown when timer is active) -->
+    <div id="timer-panel" class="panel timer-panel hidden">
+      <div class="timer-inner">
+        <svg class="timer-ring" viewBox="0 0 64 64" aria-hidden="true">
+          <circle class="timer-ring-track" cx="32" cy="32" r="28" />
+          <circle id="timer-ring-fill" class="timer-ring-fill" cx="32" cy="32" r="28" />
+        </svg>
+        <div class="timer-text-wrap">
+          <div id="timer-display" class="timer-display">1:00</div>
+          <div class="timer-label">Time left</div>
+        </div>
+        <button id="timer-stop-btn" onclick="app.stopTimer()" class="btn btn-secondary hidden">Stop</button>
+      </div>
+    </div>
+
     <!-- Backlog panel -->
     <div id="backlog-panel" class="panel">
       <div class="panel-title">Backlog</div>
@@ -91,7 +110,10 @@
     <!-- Voting cards (hidden after reveal) -->
     <div id="cards-panel" class="panel">
       <div class="panel-title">Cast Your Vote</div>
-      <div id="vote-progress" class="vote-progress"></div>
+      <div id="vote-progress-wrap" class="vote-progress-wrap">
+        <div id="vote-progress-bar" class="vote-progress-bar"><div id="vote-progress-fill" class="vote-progress-fill"></div></div>
+        <div id="vote-progress-text" class="vote-progress-text"></div>
+      </div>
       <div id="cards-grid" class="cards-grid"></div>
     </div>
 
@@ -118,10 +140,18 @@
           <div class="result-label">Maximum</div>
         </div>
       </div>
+      <div id="vote-distribution" class="vote-distribution"></div>
     </div>
 
     <!-- Action buttons -->
     <div class="controls-row">
+      <div id="timer-picker" class="timer-picker hidden">
+        <span class="timer-picker-label">⏱</span>
+        <button type="button" class="timer-preset-btn" onclick="app.startTimer(30)">30s</button>
+        <button type="button" class="timer-preset-btn" onclick="app.startTimer(60)">1m</button>
+        <button type="button" class="timer-preset-btn" onclick="app.startTimer(120)">2m</button>
+        <button type="button" class="timer-preset-btn" onclick="app.startTimer(300)">5m</button>
+      </div>
       <button id="reveal-btn" onclick="app.revealVotes()" class="btn btn-primary btn-large">
         👁 Reveal Votes
       </button>
@@ -134,7 +164,6 @@
 
   <footer class="app-footer"><a href="{{ docs_url }}" target="_blank" rel="noopener noreferrer" class="footer-docs-link" aria-label="Help &amp; Docs (opens in a new tab)" title="Help &amp; Docs (opens in a new tab)">Help &amp; Docs 📖</a> · v{{ version }}</footer>
 
-  <!-- Inject room ID and creator flag for JS before loading the script -->
   <script>
     const ROOM_ID = "{{ room_id }}";
     const IS_CREATOR = {{ 'true' if is_creator else 'false' }};
