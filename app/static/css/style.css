@@ -499,6 +499,12 @@ body {
 }
 
 /* Role selector in the name modal */
+.modal-btn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
 .role-selector {
   display: flex;
   gap: 0.75rem;
@@ -720,14 +726,6 @@ body {
 .backlog-create-hint {
   font-size: 0.8rem;
   color: #9ca3af;
-}
-.create-btn-row {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-.create-btn-row .btn {
-  flex: 1;
 }
 .backlog-input-row {
   display: flex;

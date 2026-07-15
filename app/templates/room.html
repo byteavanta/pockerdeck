@@ -45,7 +45,10 @@
           <span>👁 Viewer</span>
         </label>
       </div>
-      <button onclick="app.submitName()" class="btn btn-primary btn-full">Join →</button>
+      <div class="modal-btn-row">
+        <button onclick="app.submitName()" class="btn btn-primary btn-full">Join →</button>
+        <button onclick="app.submitNameAsSpectator()" class="btn btn-secondary btn-full">Join as Spectator →</button>
+      </div>
     </div>
   </div>
 
@@ -163,7 +166,7 @@
     }
     syncThemeIcon();
   </script>
-  <script src="/static/js/room.js?v={{ version }}"></script>
+  <script src="/static/js/room.js?v={{ js_hash }}"></script>
   <script>
     var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS, IS_SPECTATOR);
     app.init();

@@ -59,11 +59,7 @@
           <ul id="bli-list" class="bli-list"></ul>
           <input type="hidden" name="backlog" id="backlog-data" value="[]" />
         </div>
-        <input type="hidden" name="spectator" id="spectator-hidden" value="" />
-        <div class="create-btn-row">
-          <button type="submit" class="btn btn-primary btn-large" onclick="prepareForm('')">+ Create Room</button>
-          <button type="submit" class="btn btn-primary btn-large" onclick="prepareForm('1')">+ Create Room as Spectator</button>
-        </div>
+        <button type="submit" class="btn btn-primary btn-large btn-full" onclick="prepareForm()">+ Create Room</button>
       </form>
 
       <div class="divider"><span>or join with a code</span></div>
@@ -208,11 +204,10 @@
       });
     }
 
-    function prepareForm(spectator) {
+    function prepareForm() {
       var cards = currentCards.length >= 1 ? currentCards : PRESETS.fibonacci;
       document.getElementById('cards-data').value = JSON.stringify(cards);
       document.getElementById('backlog-data').value = JSON.stringify(bliItems);
-      document.getElementById('spectator-hidden').value = spectator || '';
     }
 
     function toggleTheme() {

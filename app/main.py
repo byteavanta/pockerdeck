@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -24,6 +25,10 @@ _VERSION_FILE = Path(__file__).parent / "VERSION"
 APP_VERSION = _VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "unknown"
 DOCS_URL = "https://byteavanta.github.io/pockerdeck-doc/"
 
+_ROOM_JS = _BASE_DIR / "static" / "js" / "room.js"
+# Hash changes whenever room.js is edited — restart the server to pick up the new hash in dev.
+JS_HASH = hashlib.md5(_ROOM_JS.read_bytes()).hexdigest()[:8]
+
 room_manager = RoomManager()
 conn_manager = ConnectionManager()
 
@@ -36,16 +41,14 @@ async def home(request: Request):
 
 
 @app.post("/create-room")
-async def create_room(backlog: str = Form(default=""), cards: str = Form(default=""), spectator: str = Form(default="")):
+async def create_room(backlog: str = Form(default=""), cards: str = Form(default="")):
     room = room_manager.create_room(backlog=backlog, cards=cards)
     logger.info("Room created: %s", room.id)
-    if spectator == "1":
-        return RedirectResponse(url=f"/room/{room.id}?creator=1&spectator=1", status_code=303)
     return RedirectResponse(url=f"/room/{room.id}?creator=1", status_code=303)
 
 
 @app.get("/room/{room_id}")
-async def room_page(request: Request, room_id: str, creator: str = Query(default=""), spectator: str = Query(default="")):
+async def room_page(request: Request, room_id: str, creator: str = Query(default="")):
     room = room_manager.get_room(room_id)
     if room is None:
         return RedirectResponse(url="/")
@@ -57,8 +60,9 @@ async def room_page(request: Request, room_id: str, creator: str = Query(default
             "version": APP_VERSION,
             "docs_url": DOCS_URL,
             "is_creator": creator == "1",
-            "is_spectator": spectator == "1" and creator == "1",
+            "is_spectator": False,
             "cards": room.cards,
+            "js_hash": JS_HASH,
         },
     )
 

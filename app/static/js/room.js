@@ -71,6 +71,11 @@ class RoomApp {
 
   // ── Connection ───────────────────────────────────────────────────────────
 
+  submitNameAsSpectator() {
+    this.isSpectator = true;
+    this.submitName();
+  }
+
   submitName() {
     var input = document.getElementById('name-input');
     var name = input.value.trim();
