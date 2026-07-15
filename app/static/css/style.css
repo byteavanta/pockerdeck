@@ -375,6 +375,24 @@ body {
   color: #4f46e5;
 }
 
+.vote-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.vote-label--min {
+  background: #d1fae5;
+  color: #065f46;
+}
+.vote-label--max {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 /* Results */
 .results-grid {
   display: flex;
@@ -1084,6 +1102,15 @@ body {
 [data-theme="dark"] .p-name { color: #94a3b8; }
 [data-theme="dark"] .p-name.me { color: #818cf8; }
 [data-theme="dark"] .empty-state { color: #475569; }
+
+[data-theme="dark"] .vote-label--min {
+  background: #064e3b;
+  color: #6ee7b7;
+}
+[data-theme="dark"] .vote-label--max {
+  background: #451a03;
+  color: #fcd34d;
+}
 
 /* Results */
 [data-theme="dark"] .result-number { color: #a5b4fc; }

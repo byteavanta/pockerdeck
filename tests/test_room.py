@@ -337,3 +337,126 @@ class TestRoomBuildState:
         state = room.build_state()
         assert len(state["backlog"]) == 2
         assert state["backlog"][0] == {"title": "A", "done": False}
+
+
+class TestRoomBuildStateRevealedVotes:
+    """Tests for the build_state() output consumed by the JS min/max vote badge feature.
+
+    The frontend (room.js) reads state.revealed, state.users[name].vote, and
+    state.users[name].role to compute min/max numeric votes after reveal and render
+    emphasis badges on participant cards.
+    """
+
+    def _make_room(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_participant("Bob", "user")
+        room.add_participant("Eve", "viewer")
+        return room
+
+    def test_revealed_state_exposes_raw_vote_strings(self):
+        """After reveal, build_state returns the actual vote string for each voter."""
+        room = self._make_room()
+        room.vote("Alice", "3")
+        room.vote("Bob", "8")
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["revealed"] is True
+        assert state["users"]["Alice"]["vote"] == "3"
+        assert state["users"]["Bob"]["vote"] == "8"
+
+    def test_unrevealed_state_hides_votes_from_js(self):
+        """Before reveal, votes are hidden as 'voted' — JS must not compute min/max."""
+        room = self._make_room()
+        room.vote("Alice", "3")
+        room.vote("Bob", "8")
+        state = room.build_state()
+        assert state["revealed"] is False
+        assert state["users"]["Alice"]["vote"] == "voted"
+        assert state["users"]["Bob"]["vote"] == "voted"
+        assert state["users"]["Eve"]["vote"] is None
+
+    def test_viewer_has_no_vote_in_revealed_state(self):
+        """Viewers cannot vote, so their vote is always None — JS role filter excludes them."""
+        room = self._make_room()
+        room.vote("Alice", "5")
+        room.vote("Bob", "5")
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["users"]["Eve"]["role"] == "viewer"
+        assert state["users"]["Eve"]["vote"] is None
+
+    def test_revealed_state_roles_are_present_for_all_participants(self):
+        """The JS inspects role on every user entry to filter viewers from min/max."""
+        room = self._make_room()
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["users"]["Alice"]["role"] == "admin"
+        assert state["users"]["Bob"]["role"] == "user"
+        assert state["users"]["Eve"]["role"] == "viewer"
+
+    def test_non_numeric_votes_exposed_as_is_after_reveal(self):
+        """Non-numeric votes (e.g. '?') are returned verbatim; JS filters them via isNaN."""
+        room = self._make_room()
+        room.vote("Alice", "?")
+        room.vote("Bob", "8")
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["users"]["Alice"]["vote"] == "?"
+        assert state["users"]["Bob"]["vote"] == "8"
+
+    def test_all_same_numeric_votes_exposed_correctly(self):
+        """When all numeric votes are equal, JS skips min/max labels (computedMin !== computedMax guard).
+        Backend must expose identical values faithfully."""
+        room = self._make_room()
+        room.vote("Alice", "5")
+        room.vote("Bob", "5")
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["users"]["Alice"]["vote"] == "5"
+        assert state["users"]["Bob"]["vote"] == "5"
+
+    def test_unvoted_participant_has_none_in_revealed_state(self):
+        """A non-viewer who did not vote has vote=None after reveal — JS null check excludes them."""
+        room = self._make_room()
+        room.vote("Alice", "3")
+        # Bob does not vote
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["users"]["Bob"]["vote"] is None
+
+    def test_mixed_numeric_and_non_numeric_votes_after_reveal(self):
+        """With a mix of numeric and non-numeric votes, both are exposed verbatim."""
+        room = Room.create("r2")
+        room.add_participant("Alice", "user")  # admin
+        room.add_participant("Bob", "user")
+        room.add_participant("Carol", "user")
+        room.vote("Alice", "2")
+        room.vote("Bob", "?")
+        room.vote("Carol", "13")
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["users"]["Alice"]["vote"] == "2"
+        assert state["users"]["Bob"]["vote"] == "?"
+        assert state["users"]["Carol"]["vote"] == "13"
+
+    def test_vote_truncated_to_8_chars_in_revealed_state(self):
+        """Votes longer than 8 chars are truncated by Room.vote — the revealed state reflects this."""
+        room = self._make_room()
+        room.vote("Alice", "123456789")  # 9 chars — truncated to 8
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["users"]["Alice"]["vote"] == "12345678"
+        assert len(state["users"]["Alice"]["vote"]) == 8
+
+    def test_revealed_flag_false_after_reset(self):
+        """After a reset, state.revealed is False and votes are None — JS min/max badges are cleared."""
+        room = self._make_room()
+        room.vote("Alice", "3")
+        room.vote("Bob", "8")
+        room.reveal("Alice")
+        room.reset("Alice")
+        state = room.build_state()
+        assert state["revealed"] is False
+        assert state["users"]["Alice"]["vote"] is None
+        assert state["users"]["Bob"]["vote"] is None
