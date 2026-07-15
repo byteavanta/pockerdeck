@@ -146,6 +146,14 @@ async def websocket_endpoint(
                     msg["renamed"] = {"from": target, "to": new_name}
                     await conn_manager.broadcast(room_id, msg)
 
+            elif action == "start_timer" and is_admin:
+                duration = float(data.get("duration", 60))
+                duration = max(10, min(300, duration))
+                changed = room.start_timer(duration)
+
+            elif action == "stop_timer" and is_admin:
+                changed = room.stop_timer()
+
             if changed:
                 await conn_manager.broadcast(room_id, room.build_state())
 

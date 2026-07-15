@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PockerDeck – Planning Poker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="stylesheet" href="/static/css/style.css" />
   <script>
@@ -11,9 +14,7 @@
       try {
         var t = localStorage.getItem('pockerdeck-theme');
         if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-      } catch (e) {
-        // If localStorage is unavailable or blocked, fall back to default (light) theme.
-      }
+      } catch (e) {}
     })();
   </script>
 </head>

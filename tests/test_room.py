@@ -1,4 +1,5 @@
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
@@ -488,3 +489,81 @@ class TestRoomBuildStateRevealedVotes:
         assert state["revealed"] is False
         assert state["users"]["Alice"]["vote"] is None
         assert state["users"]["Bob"]["vote"] is None
+
+
+# ── Timer ─────────────────────────────────────────────────────────────────────
+
+class TestRoomTimer:
+    def _make_room(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        return room
+
+    def test_start_timer_returns_true(self):
+        room = self._make_room()
+        assert room.start_timer(60) is True
+
+    def test_start_timer_sets_timer_active(self):
+        room = self._make_room()
+        room.start_timer(60)
+        assert room.timer_active is True
+
+    def test_start_timer_sets_timer_end_in_future(self):
+        room = self._make_room()
+        before = time.time()
+        room.start_timer(60)
+        after = time.time()
+        assert room.timer_end >= before + 60
+        assert room.timer_end <= after + 60
+
+    def test_start_timer_custom_duration(self):
+        room = self._make_room()
+        before = time.time()
+        room.start_timer(120)
+        assert room.timer_end >= before + 120
+
+    def test_stop_timer_returns_true(self):
+        room = self._make_room()
+        room.start_timer(60)
+        assert room.stop_timer() is True
+
+    def test_stop_timer_clears_timer_active(self):
+        room = self._make_room()
+        room.start_timer(60)
+        room.stop_timer()
+        assert room.timer_active is False
+
+    def test_stop_timer_clears_timer_end(self):
+        room = self._make_room()
+        room.start_timer(60)
+        room.stop_timer()
+        assert room.timer_end is None
+
+    def test_stop_timer_without_start(self):
+        """stop_timer is idempotent — works even when timer was never started."""
+        room = self._make_room()
+        assert room.stop_timer() is True
+        assert room.timer_active is False
+        assert room.timer_end is None
+
+    def test_build_state_includes_timer_fields_when_active(self):
+        room = self._make_room()
+        room.start_timer(60)
+        state = room.build_state()
+        assert state["timer_active"] is True
+        assert state["timer_end"] is not None
+        assert state["timer_end"] > time.time()
+
+    def test_build_state_timer_fields_default_inactive(self):
+        room = self._make_room()
+        state = room.build_state()
+        assert state["timer_active"] is False
+        assert state["timer_end"] is None
+
+    def test_build_state_timer_fields_after_stop(self):
+        room = self._make_room()
+        room.start_timer(60)
+        room.stop_timer()
+        state = room.build_state()
+        assert state["timer_active"] is False
+        assert state["timer_end"] is None

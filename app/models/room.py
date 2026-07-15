@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -20,6 +21,8 @@ class Room:
     active_bli: Optional[int] = None
     participants: Dict[str, Participant] = field(default_factory=dict)
     backlog: List[BacklogItem] = field(default_factory=list)
+    timer_end: Optional[float] = None
+    timer_active: bool = False
 
     @classmethod
     def create(cls, room_id: str, backlog_raw: str = "", cards_raw: str = "") -> "Room":
@@ -173,6 +176,18 @@ class Room:
             self.admin = new_name
         return True
 
+    def start_timer(self, duration: float = 60) -> bool:
+        self.timer_end = time.time() + duration
+        self.timer_active = True
+        logger.debug("Room %s: timer started for %.0fs", self.id, duration)
+        return True
+
+    def stop_timer(self) -> bool:
+        self.timer_active = False
+        self.timer_end = None
+        logger.debug("Room %s: timer stopped", self.id)
+        return True
+
     def build_state(self) -> dict:
         users: Dict[str, dict] = {}
         for name, p in self.participants.items():
@@ -185,4 +200,6 @@ class Room:
             "admin": self.admin,
             "backlog": [item.to_dict() for item in self.backlog],
             "active_bli": self.active_bli,
+            "timer_end": self.timer_end,
+            "timer_active": self.timer_active,
         }

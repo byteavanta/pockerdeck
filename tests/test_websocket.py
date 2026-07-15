@@ -364,3 +364,156 @@ class TestWebSocketInvalidMessages:
             ws.send_json({"action": "vote", "value": "3"})
             state = ws.receive_json()
             assert state["users"]["Alice"]["vote"] == "voted"
+
+
+class TestWebSocketTimer:
+    def test_admin_can_start_timer(self):
+        """Admin sending start_timer broadcasts state with timer_active=True."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()  # initial state after joining as admin
+
+            ws.send_json({"action": "start_timer", "duration": 60})
+            state = ws.receive_json()
+
+            assert state["timer_active"] is True
+            assert state["timer_end"] is not None
+
+    def test_admin_can_stop_timer(self):
+        """Admin sending stop_timer broadcasts state with timer_active=False and timer_end=None."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()
+
+            ws.send_json({"action": "start_timer", "duration": 60})
+            ws.receive_json()  # consume start_timer broadcast
+
+            ws.send_json({"action": "stop_timer"})
+            state = ws.receive_json()
+
+            assert state["timer_active"] is False
+            assert state["timer_end"] is None
+
+    def test_start_timer_default_duration(self):
+        """start_timer without a duration key defaults to 60 seconds."""
+        import time
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()
+
+            before = time.time()
+            ws.send_json({"action": "start_timer"})
+            state = ws.receive_json()
+
+            assert state["timer_active"] is True
+            assert state["timer_end"] >= before + 60
+
+    def test_start_timer_duration_clamped_to_minimum(self):
+        """Durations below 10 are clamped to 10 seconds."""
+        import time
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()
+
+            before = time.time()
+            ws.send_json({"action": "start_timer", "duration": 1})  # below minimum
+            state = ws.receive_json()
+
+            assert state["timer_active"] is True
+            # clamped to 10 — end should be at least before+10
+            assert state["timer_end"] >= before + 10
+
+    def test_start_timer_duration_clamped_to_maximum(self):
+        """Durations above 300 are clamped to 300 seconds."""
+        import time
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()
+
+            before = time.time()
+            ws.send_json({"action": "start_timer", "duration": 9999})  # above maximum
+            state = ws.receive_json()
+
+            assert state["timer_active"] is True
+            # clamped to 300 — end must not exceed before+300+1 (1s tolerance)
+            assert state["timer_end"] <= before + 301
+
+    def test_non_admin_cannot_start_timer(self):
+        """A non-admin participant sending start_timer is ignored — no broadcast, room unchanged."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws_alice:
+            ws_alice.receive_json()  # Alice joins as admin
+
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_alice.receive_json()  # state after Bob joins
+                ws_bob.receive_json()
+
+                # Bob (non-admin) tries to start timer — should be ignored
+                ws_bob.send_json({"action": "start_timer", "duration": 60})
+
+                # No broadcast is sent; verify via room model
+                r = room_manager.get_room(rid)
+                assert r.timer_active is False
+                assert r.timer_end is None
+
+    def test_non_admin_cannot_stop_timer(self):
+        """A non-admin participant sending stop_timer is ignored — room timer remains unchanged."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws_alice:
+            ws_alice.receive_json()
+
+            # Admin starts the timer
+            ws_alice.send_json({"action": "start_timer", "duration": 60})
+            ws_alice.receive_json()  # consume broadcast
+
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_alice.receive_json()  # state after Bob joins
+                ws_bob.receive_json()
+
+                # Bob (non-admin) tries to stop the timer — should be ignored
+                ws_bob.send_json({"action": "stop_timer"})
+
+                # No broadcast is sent; room timer stays active
+                r = room_manager.get_room(rid)
+                assert r.timer_active is True
+
+    def test_start_timer_broadcast_reaches_all_participants(self):
+        """start_timer broadcast is received by all connected participants."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws_alice:
+            ws_alice.receive_json()
+
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_alice.receive_json()  # state after Bob joins
+                ws_bob.receive_json()
+
+                ws_alice.send_json({"action": "start_timer", "duration": 30})
+                state_alice = ws_alice.receive_json()
+                state_bob = ws_bob.receive_json()
+
+                assert state_alice["timer_active"] is True
+                assert state_bob["timer_active"] is True
