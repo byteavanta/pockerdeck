@@ -16,8 +16,9 @@ logger = logging.getLogger("pockerdeck")
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+_BASE_DIR = Path(__file__).parent
+app.mount("/static", StaticFiles(directory=_BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 
 _VERSION_FILE = Path(__file__).parent / "VERSION"
 APP_VERSION = _VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "unknown"
