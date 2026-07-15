@@ -186,6 +186,25 @@ class RoomApp {
 
     var isAdmin = (this.userRole === 'admin');
 
+    // Compute min/max numeric votes when cards are revealed
+    var minVote = null;
+    var maxVote = null;
+    if (state.revealed) {
+      var numericVotes = Object.values(state.users)
+        .filter(function (info) {
+          return info.role !== 'viewer' && info.vote !== null && info.vote !== undefined && !isNaN(Number(info.vote));
+        })
+        .map(function (info) { return Number(info.vote); });
+      if (numericVotes.length > 0) {
+        var computedMin = Math.min.apply(null, numericVotes);
+        var computedMax = Math.max.apply(null, numericVotes);
+        if (computedMin !== computedMax) {
+          minVote = computedMin;
+          maxVote = computedMax;
+        }
+      }
+    }
+
     entries.forEach(function (entry) {
       var name = entry[0];
       var info = entry[1];
@@ -217,6 +236,17 @@ class RoomApp {
 
       card.appendChild(badge);
       card.appendChild(nameEl);
+
+      // viewers observe votes but are not shown min/max emphasis
+      if (state.revealed && !isViewer && minVote !== null) {
+        var voteNum = Number(voteVal);
+        if (!isNaN(voteNum) && (voteNum === minVote || voteNum === maxVote)) {
+          var voteLabel = document.createElement('span');
+          voteLabel.className = 'vote-label ' + (voteNum === minVote ? 'vote-label--min' : 'vote-label--max');
+          voteLabel.textContent = voteNum === minVote ? 'min' : 'max';
+          card.appendChild(voteLabel);
+        }
+      }
 
       if (isAdmin && name !== self.userName) {
         var actions = document.createElement('div');
