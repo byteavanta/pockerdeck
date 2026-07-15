@@ -36,14 +36,16 @@ async def home(request: Request):
 
 
 @app.post("/create-room")
-async def create_room(backlog: str = Form(default=""), cards: str = Form(default="")):
+async def create_room(backlog: str = Form(default=""), cards: str = Form(default=""), spectator: str = Form(default="")):
     room = room_manager.create_room(backlog=backlog, cards=cards)
     logger.info("Room created: %s", room.id)
+    if spectator == "1":
+        return RedirectResponse(url=f"/room/{room.id}?creator=1&spectator=1", status_code=303)
     return RedirectResponse(url=f"/room/{room.id}?creator=1", status_code=303)
 
 
 @app.get("/room/{room_id}")
-async def room_page(request: Request, room_id: str, creator: str = Query(default="")):
+async def room_page(request: Request, room_id: str, creator: str = Query(default=""), spectator: str = Query(default="")):
     room = room_manager.get_room(room_id)
     if room is None:
         return RedirectResponse(url="/")
@@ -55,6 +57,7 @@ async def room_page(request: Request, room_id: str, creator: str = Query(default
             "version": APP_VERSION,
             "docs_url": DOCS_URL,
             "is_creator": creator == "1",
+            "is_spectator": spectator == "1" and creator == "1",
             "cards": room.cards,
         },
     )

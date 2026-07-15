@@ -138,6 +138,7 @@
   <script>
     const ROOM_ID = "{{ room_id }}";
     const IS_CREATOR = {{ 'true' if is_creator else 'false' }};
+    const IS_SPECTATOR = {{ 'true' if is_spectator else 'false' }};
     const CARDS = {{ cards | tojson }};
 
     function toggleTheme() {
@@ -164,7 +165,7 @@
   </script>
   <script src="/static/js/room.js?v={{ version }}"></script>
   <script>
-    var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS);
+    var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS, IS_SPECTATOR);
     app.init();
   </script>
 </body>

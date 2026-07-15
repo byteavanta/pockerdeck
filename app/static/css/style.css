@@ -721,6 +721,14 @@ body {
   font-size: 0.8rem;
   color: #9ca3af;
 }
+.create-btn-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.create-btn-row .btn {
+  flex: 1;
+}
 .backlog-input-row {
   display: flex;
   gap: 0.5rem;

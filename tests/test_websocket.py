@@ -92,3 +92,275 @@ class TestWebSocketFlow:
         with pytest.raises(Exception):
             with client.websocket_connect("/ws/fake123/Alice?role=user") as ws:
                 ws.receive_json()
+
+
+class TestWebSocketViewerAdmin:
+    def test_viewer_admin_cannot_vote(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            state = ws_eve.receive_json()
+            assert state["admin"] == "Eve"
+            assert state["users"]["Eve"]["role"] == "viewer"
+
+            ws_eve.send_json({"action": "vote", "value": "5"})
+            # vote is rejected — no broadcast is sent; verify via room model
+            r = room_manager.get_room(rid)
+            assert r.participants["Eve"].vote is None
+
+    def test_viewer_admin_can_reveal(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()  # initial state after Eve joins
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_eve.receive_json()  # state after Bob joins
+                ws_bob.receive_json()
+
+                ws_bob.send_json({"action": "vote", "value": "5"})
+                ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                # Eve (viewer-admin) reveals
+                ws_eve.send_json({"action": "reveal"})
+                state = ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                assert state["revealed"] is True
+                assert state["users"]["Bob"]["vote"] == "5"
+
+    def test_viewer_admin_can_reset(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                ws_bob.send_json({"action": "vote", "value": "3"})
+                ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                ws_eve.send_json({"action": "reveal"})
+                ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                ws_eve.send_json({"action": "reset", "story": "Next sprint"})
+                state = ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                assert state["revealed"] is False
+                assert state["story"] == "Next sprint"
+                assert state["users"]["Bob"]["vote"] is None
+
+    def test_viewer_admin_can_set_story(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            ws_eve.send_json({"action": "set_story", "story": "My story"})
+            state = ws_eve.receive_json()
+            assert state["story"] == "My story"
+
+    def test_viewer_admin_can_add_backlog_item(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            ws_eve.send_json({"action": "add_bli", "title": "New item"})
+            state = ws_eve.receive_json()
+            assert len(state["backlog"]) == 1
+            assert state["backlog"][0]["title"] == "New item"
+
+    def test_viewer_admin_can_edit_backlog_item(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            ws_eve.send_json({"action": "add_bli", "title": "Original"})
+            ws_eve.receive_json()
+
+            ws_eve.send_json({"action": "edit_bli", "index": 0, "title": "Updated"})
+            state = ws_eve.receive_json()
+            assert state["backlog"][0]["title"] == "Updated"
+
+    def test_viewer_admin_can_delete_backlog_item(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            ws_eve.send_json({"action": "add_bli", "title": "To delete"})
+            ws_eve.receive_json()
+
+            ws_eve.send_json({"action": "delete_bli", "index": 0})
+            state = ws_eve.receive_json()
+            assert len(state["backlog"]) == 0
+
+    def test_viewer_admin_can_mark_backlog_done(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            ws_eve.send_json({"action": "add_bli", "title": "Story"})
+            ws_eve.receive_json()
+
+            ws_eve.send_json({"action": "mark_bli_done", "index": 0})
+            state = ws_eve.receive_json()
+            assert state["backlog"][0]["done"] is True
+
+    def test_viewer_admin_can_select_backlog_item(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            ws_eve.send_json({"action": "add_bli", "title": "Sprint task"})
+            ws_eve.receive_json()
+
+            ws_eve.send_json({"action": "select_bli", "index": 0})
+            state = ws_eve.receive_json()
+            assert state["story"] == "Sprint task"
+            assert state["active_bli"] == 0
+
+    def test_admin_promotion_skips_viewer_admin_on_disconnect(self):
+        """When viewer-admin disconnects and a regular user is present, that user is promoted."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                ws_eve.close()  # Eve (viewer-admin) disconnects
+                state = ws_bob.receive_json()
+
+                assert state["admin"] == "Bob"
+                assert state["users"]["Bob"]["role"] == "admin"
+
+    def test_viewer_admin_can_kick(self):
+        """Viewer-admin can kick another participant via the WS kick action."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            with client.websocket_connect(f"/ws/{rid}/Carol?role=user") as ws_carol:
+                ws_eve.receive_json()
+                ws_carol.receive_json()
+
+                ws_eve.send_json({"action": "kick", "target": "Carol"})
+                # Server closes Carol's socket with code 4005
+                msg = ws_carol.receive()
+                assert msg["type"] == "websocket.close"
+                assert msg.get("code") == 4005
+
+            # Carol's with-block exited; Eve receives the disconnect broadcast
+            state = ws_eve.receive_json()
+            assert "Carol" not in state["users"]
+
+    def test_viewer_admin_can_rename_user(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Eve?role=viewer") as ws_eve:
+            ws_eve.receive_json()
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                ws_eve.send_json({"action": "rename_user", "target": "Bob", "new_name": "Robert"})
+                state = ws_eve.receive_json()
+                ws_bob.receive_json()
+
+                assert "Robert" in state["users"]
+                assert "Bob" not in state["users"]
+
+
+class TestHomeRoute:
+    def test_home_returns_200(self):
+        client = TestClient(app)
+        resp = client.get("/")
+        assert resp.status_code == 200
+
+    def test_home_contains_version(self):
+        client = TestClient(app)
+        resp = client.get("/")
+        assert resp.status_code == 200
+        # The template renders the version variable; it should be present in the HTML
+        from main import APP_VERSION
+        assert APP_VERSION in resp.text
+
+
+class TestRoomManagerContains:
+    def test_contains_existing_room(self):
+        room = room_manager.create_room()
+        assert room.id in room_manager
+
+    def test_not_contains_unknown_room(self):
+        assert "nonexistent" not in room_manager
+
+
+class TestConnectionManagerBroadcast:
+    def test_broadcast_to_unknown_room_is_noop(self):
+        import asyncio
+        from managers.connection_manager import ConnectionManager
+        cm = ConnectionManager()
+        asyncio.run(cm.broadcast("no-such-room", {"type": "state"}))
+        assert cm.connections == {}
+
+
+class TestWebSocketInvalidMessages:
+    def test_invalid_json_text_is_silently_ignored(self):
+        """Sending raw non-JSON text triggers ValueError -> continue; connection stays alive."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()  # initial state on join
+
+            ws.send_text("not valid json")  # triggers ValueError -> continue
+
+            # Connection is still alive; a subsequent valid action still works
+            ws.send_json({"action": "vote", "value": "5"})
+            state = ws.receive_json()
+            assert state["users"]["Alice"]["vote"] == "voted"
+
+    def test_non_dict_json_is_silently_ignored(self):
+        """Sending valid JSON that is not a dict triggers the isinstance check -> continue."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()  # initial state on join
+
+            ws.send_text("[1, 2, 3]")  # valid JSON but not a dict -> continue
+
+            # Connection is still alive; a subsequent valid action still works
+            ws.send_json({"action": "vote", "value": "3"})
+            state = ws.receive_json()
+            assert state["users"]["Alice"]["vote"] == "voted"
