@@ -59,6 +59,7 @@ async def room_page(request: Request, room_id: str, creator: str = Query(default
             "room_id": room_id,
             "version": APP_VERSION,
             "docs_url": DOCS_URL,
+            # UI-only: hides redundant "Join as Spectator" button for invitees; not an access gate
             "is_creator": creator == "1",
             "is_spectator": False,
             "cards": room.cards,

@@ -51,7 +51,7 @@
       </div>
       <div class="modal-btn-row">
         <button onclick="app.submitName()" class="btn btn-primary btn-full">Join →</button>
-        <button onclick="app.submitNameAsSpectator()" class="btn btn-secondary btn-full">Join as Spectator →</button>
+        {% if is_creator %}<button onclick="app.submitNameAsSpectator()" class="btn btn-secondary btn-full">Join as Spectator →</button>{% endif %}
       </div>
     </div>
   </div>

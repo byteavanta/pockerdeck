@@ -130,6 +130,20 @@ class TestRoomPageSpectatorFlag:
         assert resp.status_code == 200
         assert "IS_SPECTATOR = false" in resp.text
 
+    def test_room_page_with_creator_shows_spectator_button(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        resp = client.get(f"/room/{room.id}?creator=1")
+        assert resp.status_code == 200
+        assert "submitNameAsSpectator" in resp.text
+
+    def test_room_page_without_creator_hides_spectator_button(self):
+        client = TestClient(app)
+        room = room_manager.create_room()
+        resp = client.get(f"/room/{room.id}")
+        assert resp.status_code == 200
+        assert "submitNameAsSpectator" not in resp.text
+
     def test_room_page_script_tag_contains_js_hash(self):
         from main import JS_HASH
         client = TestClient(app)

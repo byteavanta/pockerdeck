@@ -334,49 +334,6 @@ class RoomApp {
         // Update existing card in place
         self._updateParticipantCard(existingCard, name, info, isViewer, isAdmin, isMe, state, minVote, maxVote, isRevealTransition, idx);
       }
-
-      var nameEl = document.createElement('div');
-      nameEl.className = 'p-name' + (name === self.userName ? ' me' : '');
-
-      var roleIcon = name === state.admin ? ' 👑' : '';
-      nameEl.textContent = name + roleIcon;
-
-      card.appendChild(badge);
-      card.appendChild(nameEl);
-
-      // viewers observe votes but are not shown min/max emphasis
-      if (state.revealed && !isViewer && minVote !== null) {
-        var voteNum = Number(voteVal);
-        if (!isNaN(voteNum) && (voteNum === minVote || voteNum === maxVote)) {
-          var voteLabel = document.createElement('span');
-          voteLabel.className = 'vote-label ' + (voteNum === minVote ? 'vote-label--min' : 'vote-label--max');
-          voteLabel.textContent = voteNum === minVote ? 'min' : 'max';
-          card.appendChild(voteLabel);
-        }
-      }
-
-      if (isAdmin && name !== self.userName) {
-        var actions = document.createElement('div');
-        actions.className = 'p-actions';
-
-        var renameBtn = document.createElement('button');
-        renameBtn.className = 'btn-icon';
-        renameBtn.title = 'Rename';
-        renameBtn.textContent = '✏️';
-        renameBtn.addEventListener('click', function () { self.renameUser(name); });
-
-        var kickBtn = document.createElement('button');
-        kickBtn.className = 'btn-icon btn-icon-danger';
-        kickBtn.title = 'Kick';
-        kickBtn.textContent = '✕';
-        kickBtn.addEventListener('click', function () { self.kickUser(name); });
-
-        actions.appendChild(renameBtn);
-        actions.appendChild(kickBtn);
-        card.appendChild(actions);
-      }
-
-      container.appendChild(card);
     });
 
     // If renaming, show popover
@@ -932,6 +889,8 @@ class RoomApp {
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   vote(value) {
+    // Viewers cannot vote; also enforced server-side in Room.vote()
+    if (this.userRole === 'viewer') return;
     if (this.myVote === value) {
       this.myVote = null;
       this.send({ action: 'vote', value: null });
