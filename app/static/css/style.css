@@ -745,6 +745,13 @@ body {
   40%, 80%  { transform: translateX(6px); }
 }
 
+/* Role selector in the name modal */
+.modal-btn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
 /* Role selector */
 .role-selector {
   display: flex;

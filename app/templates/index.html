@@ -29,7 +29,7 @@
         Create a room, share the link — no sign-up needed.
       </p>
 
-      <form id="create-form" action="/create-room" method="post" onsubmit="prepareForm()">
+      <form id="create-form" action="/create-room" method="post">
         <div class="estimation-section">
           <div class="estimation-section-header">
             <span class="estimation-section-label">🃏 Estimation Type</span>
@@ -60,7 +60,7 @@
           <ul id="bli-list" class="bli-list"></ul>
           <input type="hidden" name="backlog" id="backlog-data" value="[]" />
         </div>
-        <button type="submit" class="btn btn-primary btn-large">+ Create Room</button>
+        <button type="submit" class="btn btn-primary btn-large btn-full" onclick="prepareForm()">+ Create Room</button>
       </form>
 
       <div class="divider"><span>or join with a code</span></div>

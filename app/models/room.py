@@ -57,8 +57,9 @@ class Room:
         if role not in ("user", "viewer"):
             role = "user"
         if self.admin is None:
-            role = "admin"
             self.admin = name
+            if role != "viewer":
+                role = "admin"
         p = Participant(name=name, role=role)
         self.participants[name] = p
         logger.debug("Room %s: added participant '%s' role=%s", self.id, name, role)
@@ -96,7 +97,7 @@ class Room:
 
     def reveal(self, user_name: str) -> bool:
         p = self.participants.get(user_name)
-        if not p or p.role not in ("admin", "user"):
+        if not p or not (p.role in ("admin", "user") or (p.role == "viewer" and self.admin == user_name)):
             return False
         self.revealed = True
         logger.debug("Room %s: votes revealed by '%s'", self.id, user_name)
@@ -104,7 +105,7 @@ class Room:
 
     def reset(self, user_name: str, story: str = "") -> bool:
         p = self.participants.get(user_name)
-        if not p or p.role not in ("admin", "user"):
+        if not p or not (p.role in ("admin", "user") or (p.role == "viewer" and self.admin == user_name)):
             return False
         self.revealed = False
         self.story = str(story)[:500]
@@ -115,7 +116,7 @@ class Room:
 
     def set_story(self, user_name: str, story: str) -> bool:
         p = self.participants.get(user_name)
-        if not p or p.role not in ("admin", "user"):
+        if not p or not (p.role in ("admin", "user") or (p.role == "viewer" and self.admin == user_name)):
             return False
         self.story = str(story)[:500]
         return True
