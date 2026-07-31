@@ -1,10 +1,12 @@
 class RoomApp {
-  constructor(roomId, isCreator, cards) {
+  constructor(roomId, isCreator, cards, isSpectator) {
     this.roomId = roomId;
     this.isCreator = isCreator;
+    this.isSpectator = isSpectator || false;
     this.cards = cards;
     this.userName = null;
     this.userRole = 'user';
+    this.isAdmin = false;
     this.ws = null;
     this.myVote = null;
     this.shouldReconnect = true;
@@ -22,7 +24,8 @@ class RoomApp {
     document.getElementById('room-id-text').innerHTML =
       '<span class="room-id-badge">' + this.roomId + '</span>';
 
-    if (this.isCreator) {
+    var savedSpectator = sessionStorage.getItem('spectator_' + this.roomId) === '1';
+    if (this.isCreator || this.isSpectator || savedSpectator) {
       var roleSelector = document.getElementById('role-selector');
       if (roleSelector) roleSelector.style.display = 'none';
     }
@@ -60,6 +63,9 @@ class RoomApp {
     if (saved) {
       this.userName = saved;
       this.userRole = sessionStorage.getItem('role_' + this.roomId) || 'user';
+      if (sessionStorage.getItem('spectator_' + this.roomId) === '1') {
+        this.isSpectator = true;
+      }
       document.getElementById('name-modal').classList.add('hidden');
       this.showApp();
       this.connect();
@@ -75,6 +81,11 @@ class RoomApp {
 
   // ── Connection ──────────────────────────────────────────────────────────────
 
+  submitNameAsSpectator() {
+    this.isSpectator = true;
+    this.submitName();
+  }
+
   submitName() {
     var input = document.getElementById('name-input');
     var name = input.value.trim();
@@ -85,9 +96,16 @@ class RoomApp {
     }
     var roleInput = document.querySelector('input[name="role"]:checked');
     this.userName = name;
-    this.userRole = this.isCreator ? 'user' : (roleInput ? roleInput.value : 'user');
+    if (this.isSpectator) {
+      this.userRole = 'viewer';
+    } else {
+      this.userRole = this.isCreator ? 'user' : (roleInput ? roleInput.value : 'user');
+    }
     sessionStorage.setItem('name_' + this.roomId, name);
     sessionStorage.setItem('role_' + this.roomId, this.userRole);
+    if (this.isSpectator) {
+      sessionStorage.setItem('spectator_' + this.roomId, '1');
+    }
     document.getElementById('name-modal').classList.add('hidden');
     this.showApp();
     this.connect();
@@ -177,6 +195,7 @@ class RoomApp {
     if (state.users[this.userName]) {
       this.userRole = state.users[this.userName].role;
     }
+    this.isAdmin = (state.admin === this.userName);
     if (!state.revealed && state.users[this.userName] && state.users[this.userName].vote === null) {
       this.myVote = null;
     }
@@ -272,10 +291,9 @@ class RoomApp {
       return;
     }
 
-    var isAdmin = (this.userRole === 'admin');
-
-    // Min/max for revealed
-    var minVote = null, maxVote = null;
+    var isAdmin = this.isAdmin;
+    var minVote = null;
+    var maxVote = null;
     if (state.revealed) {
       var nums = Object.values(state.users)
         .filter(function (u) { return u.role !== 'viewer' && u.vote !== null && u.vote !== undefined && !isNaN(Number(u.vote)); })
@@ -541,11 +559,10 @@ class RoomApp {
     var timerPicker = document.getElementById('timer-picker');
 
     var isViewer = (this.userRole === 'viewer');
-    var isAdmin  = (this.userRole === 'admin');
-    var canAct   = !isViewer;
+    var canAct   = !isViewer || this.isAdmin;
 
-    storyText.readOnly = isViewer;
-    storyBtn.classList.toggle('hidden', isViewer);
+    storyText.readOnly = isViewer && !this.isAdmin;
+    storyBtn.classList.toggle('hidden', isViewer && !this.isAdmin);
 
     if (state.revealed) {
       cardsPanel.classList.add('hidden');
@@ -726,8 +743,8 @@ class RoomApp {
     var list     = document.getElementById('backlog-list');
     var addRow   = document.getElementById('backlog-add-row');
     var emptyMsg = document.getElementById('backlog-empty');
-    var backlog  = state.backlog || [];
-    var isAdmin  = (this.userRole === 'admin');
+    var backlog = state.backlog || [];
+    var isAdmin = this.isAdmin;
 
     addRow.classList.toggle('hidden', !isAdmin);
     list.innerHTML = '';
@@ -872,6 +889,8 @@ class RoomApp {
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   vote(value) {
+    // Viewers cannot vote; also enforced server-side in Room.vote()
+    if (this.userRole === 'viewer') return;
     if (this.myVote === value) {
       this.myVote = null;
       this.send({ action: 'vote', value: null });
