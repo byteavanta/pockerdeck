@@ -17,7 +17,7 @@ class TestBacklogItem:
 
     def test_to_dict(self):
         item = BacklogItem(title="Signup", done=True)
-        assert item.to_dict() == {"title": "Signup", "done": True}
+        assert item.to_dict() == {"title": "Signup", "done": True, "vote_result": None}
 
 
 # ── Participant ───────────────────────────────────────────────────────────────
@@ -196,6 +196,183 @@ class TestRoomVoting:
         assert room.set_story("Eve", "Nope") is False
 
 
+class TestRoomComputeVoteResult:
+    """Unit tests for Room._compute_vote_result() and reveal() vote_result integration."""
+
+    def _make_room_with_users(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_participant("Bob", "user")
+        room.add_participant("Eve", "viewer")
+        return room
+
+    # ── No votes ──────────────────────────────────────────────────────────────
+
+    def test_no_votes_returns_none(self):
+        room = self._make_room_with_users()
+        assert room._compute_vote_result() is None
+
+    # ── Single numeric vote ───────────────────────────────────────────────────
+
+    def test_single_numeric_vote_returns_integer_string(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "5")
+        assert room._compute_vote_result() == "5"
+
+    def test_single_numeric_vote_whole_float_returns_integer_string(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "3.0")
+        assert room._compute_vote_result() == "3"
+
+    # ── Multiple numeric votes ────────────────────────────────────────────────
+
+    def test_multiple_numeric_votes_whole_average_returns_integer_string(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "2")
+        room.vote("Bob", "4")
+        assert room._compute_vote_result() == "3"
+
+    def test_multiple_numeric_votes_fractional_average_returns_one_decimal(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "1")
+        room.vote("Bob", "2")
+        assert room._compute_vote_result() == "1.5"
+
+    # ── Non-numeric votes ─────────────────────────────────────────────────────
+
+    def test_non_numeric_unanimous_returns_that_value(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "M")
+        room.vote("Bob", "M")
+        assert room._compute_vote_result() == "M"
+
+    def test_question_mark_among_tshirt_sizes_returns_needs_discussion(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "M")
+        room.vote("Bob", "?")
+        assert room._compute_vote_result() == "Needs discussion"
+
+    def test_all_question_mark_votes_returns_needs_discussion(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "?")
+        room.vote("Bob", "?")
+        assert room._compute_vote_result() == "Needs discussion"
+
+    def test_non_numeric_majority_returns_most_common(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_participant("Bob", "user")
+        room.add_participant("Carol", "user")
+        room.vote("Alice", "M")
+        room.vote("Bob", "M")
+        room.vote("Carol", "L")
+        assert room._compute_vote_result() == "M"
+
+    def test_non_numeric_two_way_tie_returns_joined_values(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "S")
+        room.vote("Bob", "M")
+        assert room._compute_vote_result() == "M / S"
+
+    def test_non_numeric_three_way_tie_returns_joined_values(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_participant("Bob", "user")
+        room.add_participant("Carol", "user")
+        room.vote("Alice", "S")
+        room.vote("Bob", "M")
+        room.vote("Carol", "L")
+        assert room._compute_vote_result() == "L / M / S"
+
+    # ── Mixed numeric and non-numeric ─────────────────────────────────────────
+
+    def test_mixed_numeric_and_non_numeric_returns_needs_discussion(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "5")
+        room.vote("Bob", "?")
+        assert room._compute_vote_result() == "Needs discussion"
+
+    # ── Viewer exclusion ──────────────────────────────────────────────────────
+
+    def test_viewer_vote_excluded_from_computation(self):
+        """Viewers cannot vote, so their None vote must not affect the result."""
+        room = self._make_room_with_users()
+        room.vote("Alice", "8")
+        # Eve is a viewer — vote() returns False for viewers so Eve has no vote;
+        # the computation must still return Alice's result, not None.
+        assert room._compute_vote_result() == "8"
+
+    # ── Infinity edge case ────────────────────────────────────────────────────
+
+    def test_infinity_vote_treated_as_non_numeric(self):
+        """'Infinity' is 8 chars (passes the length cap) but float('Infinity') is
+        non-finite, so it must land in non_numeric_votes, not numeric_votes."""
+        room = self._make_room_with_users()
+        room.vote("Alice", "Infinity")
+        assert room._compute_vote_result() == "Infinity"
+
+    def test_infinity_mixed_with_numeric_returns_needs_discussion(self):
+        room = self._make_room_with_users()
+        room.vote("Alice", "Infinity")
+        room.vote("Bob", "5")
+        assert room._compute_vote_result() == "Needs discussion"
+
+
+# ── reveal() integration with vote_result ────────────────────────────────────
+
+class TestRoomRevealVoteResult:
+    """Integration tests for reveal() writing vote_result onto the active BLI."""
+
+    def _make_room_with_bli(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_participant("Bob", "user")
+        room.add_backlog_item("Feature A")
+        room.select_backlog_item(0)
+        return room
+
+    def test_reveal_with_active_bli_sets_vote_result(self):
+        room = self._make_room_with_bli()
+        room.vote("Alice", "3")
+        room.vote("Bob", "5")
+        room.reveal("Alice")
+        assert room.backlog[0].vote_result == "4"
+
+    def test_reveal_with_active_bli_no_votes_does_not_set_vote_result(self):
+        """When no one has voted, _compute_vote_result returns None and
+        vote_result must remain None on the BLI."""
+        room = self._make_room_with_bli()
+        room.reveal("Alice")
+        assert room.backlog[0].vote_result is None
+
+    def test_reveal_with_no_active_bli_does_not_crash(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_backlog_item("Feature B")
+        # active_bli is None — no item selected
+        assert room.active_bli is None
+        room.vote("Alice", "5")
+        result = room.reveal("Alice")
+        assert result is True
+        assert room.revealed is True
+
+    def test_reveal_with_no_active_bli_does_not_set_vote_result_on_any_item(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_backlog_item("Feature C")
+        room.vote("Alice", "8")
+        room.reveal("Alice")
+        assert room.backlog[0].vote_result is None
+
+    def test_reveal_sets_vote_result_visible_in_build_state(self):
+        room = self._make_room_with_bli()
+        room.vote("Alice", "5")
+        room.vote("Bob", "5")
+        room.reveal("Alice")
+        state = room.build_state()
+        assert state["backlog"][0]["vote_result"] == "5"
+
+
 class TestRoomVoteClearance:
     def test_vote_with_empty_string_clears_vote(self):
         room = Room.create("r1")
@@ -365,7 +542,7 @@ class TestRoomBuildState:
         room = Room.create("r1", backlog_raw='["A", "B"]')
         state = room.build_state()
         assert len(state["backlog"]) == 2
-        assert state["backlog"][0] == {"title": "A", "done": False}
+        assert state["backlog"][0] == {"title": "A", "done": False, "vote_result": None}
 
 
 class TestRoomBuildStateRevealedVotes:

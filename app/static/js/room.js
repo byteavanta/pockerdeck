@@ -773,6 +773,13 @@ class RoomApp {
       li.appendChild(num);
       li.appendChild(title);
 
+      if (item.vote_result) {
+        var resultBadge = document.createElement('span');
+        resultBadge.className = 'bli-tag bli-vote-result';
+        resultBadge.textContent = item.vote_result;
+        li.appendChild(resultBadge);
+      }
+
       if (isActive) {
         var activeTag = document.createElement('span');
         activeTag.className = 'bli-tag active-tag';
