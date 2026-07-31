@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -23,6 +24,10 @@ templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 _VERSION_FILE = Path(__file__).parent / "VERSION"
 APP_VERSION = _VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "unknown"
 DOCS_URL = "https://byteavanta.github.io/pockerdeck-doc/"
+
+_ROOM_JS = _BASE_DIR / "static" / "js" / "room.js"
+# Hash changes whenever room.js is edited — restart the server to pick up the new hash in dev.
+JS_HASH = hashlib.md5(_ROOM_JS.read_bytes()).hexdigest()[:8]
 
 room_manager = RoomManager()
 conn_manager = ConnectionManager()
@@ -54,8 +59,11 @@ async def room_page(request: Request, room_id: str, creator: str = Query(default
             "room_id": room_id,
             "version": APP_VERSION,
             "docs_url": DOCS_URL,
+            # UI-only: hides redundant "Join as Spectator" button for invitees; not an access gate
             "is_creator": creator == "1",
+            "is_spectator": False,
             "cards": room.cards,
+            "js_hash": JS_HASH,
         },
     )
 

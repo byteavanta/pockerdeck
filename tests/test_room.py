@@ -1,4 +1,5 @@
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
@@ -91,11 +92,11 @@ class TestRoomParticipants:
         assert p2.role == "user"
         assert room.admin == "Alice"
 
-    def test_viewer_cannot_become_admin_first(self):
+    def test_viewer_can_be_admin_with_viewer_role(self):
         room = self._make_room()
         p = room.add_participant("Eve", "viewer")
-        # First user always becomes admin, overriding viewer
-        assert p.role == "admin"
+        # First joiner becomes admin but keeps their requested role
+        assert p.role == "viewer"
         assert room.admin == "Eve"
 
     def test_invalid_role_defaults_to_user(self):
@@ -195,6 +196,24 @@ class TestRoomVoting:
         assert room.set_story("Eve", "Nope") is False
 
 
+class TestRoomVoteClearance:
+    def test_vote_with_empty_string_clears_vote(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.vote("Alice", "5")
+        assert room.participants["Alice"].vote == "5"
+        assert room.vote("Alice", "") is True
+        assert room.participants["Alice"].vote is None
+
+    def test_vote_with_none_clears_vote(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.vote("Alice", "8")
+        assert room.participants["Alice"].vote == "8"
+        assert room.vote("Alice", None) is True
+        assert room.participants["Alice"].vote is None
+
+
 class TestRoomBacklog:
     def _make_room(self):
         room = Room.create("r1")
@@ -266,6 +285,16 @@ class TestRoomBacklog:
         room.add_backlog_item("Story")
         assert room.mark_backlog_done(0) is True
         assert room.backlog[0].done is True
+
+    def test_mark_backlog_done_invalid_index(self):
+        room = self._make_room()
+        assert room.mark_backlog_done(0) is False
+        assert room.mark_backlog_done(-1) is False
+
+    def test_delete_backlog_item_invalid_index(self):
+        room = self._make_room()
+        assert room.delete_backlog_item(0) is False
+        assert room.delete_backlog_item(-1) is False
 
     def test_mark_done_clears_active(self):
         room = self._make_room()
@@ -460,3 +489,81 @@ class TestRoomBuildStateRevealedVotes:
         assert state["revealed"] is False
         assert state["users"]["Alice"]["vote"] is None
         assert state["users"]["Bob"]["vote"] is None
+
+
+# ── Timer ─────────────────────────────────────────────────────────────────────
+
+class TestRoomTimer:
+    def _make_room(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        return room
+
+    def test_start_timer_returns_true(self):
+        room = self._make_room()
+        assert room.start_timer(60) is True
+
+    def test_start_timer_sets_timer_active(self):
+        room = self._make_room()
+        room.start_timer(60)
+        assert room.timer_active is True
+
+    def test_start_timer_sets_timer_end_in_future(self):
+        room = self._make_room()
+        before = time.time()
+        room.start_timer(60)
+        after = time.time()
+        assert room.timer_end >= before + 60
+        assert room.timer_end <= after + 60
+
+    def test_start_timer_custom_duration(self):
+        room = self._make_room()
+        before = time.time()
+        room.start_timer(120)
+        assert room.timer_end >= before + 120
+
+    def test_stop_timer_returns_true(self):
+        room = self._make_room()
+        room.start_timer(60)
+        assert room.stop_timer() is True
+
+    def test_stop_timer_clears_timer_active(self):
+        room = self._make_room()
+        room.start_timer(60)
+        room.stop_timer()
+        assert room.timer_active is False
+
+    def test_stop_timer_clears_timer_end(self):
+        room = self._make_room()
+        room.start_timer(60)
+        room.stop_timer()
+        assert room.timer_end is None
+
+    def test_stop_timer_without_start(self):
+        """stop_timer is idempotent — works even when timer was never started."""
+        room = self._make_room()
+        assert room.stop_timer() is True
+        assert room.timer_active is False
+        assert room.timer_end is None
+
+    def test_build_state_includes_timer_fields_when_active(self):
+        room = self._make_room()
+        room.start_timer(60)
+        state = room.build_state()
+        assert state["timer_active"] is True
+        assert state["timer_end"] is not None
+        assert state["timer_end"] > time.time()
+
+    def test_build_state_timer_fields_default_inactive(self):
+        room = self._make_room()
+        state = room.build_state()
+        assert state["timer_active"] is False
+        assert state["timer_end"] is None
+
+    def test_build_state_timer_fields_after_stop(self):
+        room = self._make_room()
+        room.start_timer(60)
+        room.stop_timer()
+        state = room.build_state()
+        assert state["timer_active"] is False
+        assert state["timer_end"] is None

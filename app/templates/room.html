@@ -49,7 +49,10 @@
           <span>👁 Viewer</span>
         </label>
       </div>
-      <button onclick="app.submitName()" class="btn btn-primary btn-full">Join →</button>
+      <div class="modal-btn-row">
+        <button onclick="app.submitName()" class="btn btn-primary btn-full">Join →</button>
+        {% if is_creator %}<button onclick="app.submitNameAsSpectator()" class="btn btn-secondary btn-full">Join as Spectator →</button>{% endif %}
+      </div>
     </div>
   </div>
 
@@ -167,6 +170,7 @@
   <script>
     const ROOM_ID = "{{ room_id }}";
     const IS_CREATOR = {{ 'true' if is_creator else 'false' }};
+    const IS_SPECTATOR = {{ 'true' if is_spectator else 'false' }};
     const CARDS = {{ cards | tojson }};
 
     function toggleTheme() {
@@ -191,9 +195,9 @@
     }
     syncThemeIcon();
   </script>
-  <script src="/static/js/room.js?v={{ version }}"></script>
+  <script src="/static/js/room.js?v={{ js_hash }}"></script>
   <script>
-    var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS);
+    var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS, IS_SPECTATOR);
     app.init();
   </script>
 </body>
