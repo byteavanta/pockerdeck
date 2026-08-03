@@ -567,3 +567,106 @@ class TestRoomTimer:
         state = room.build_state()
         assert state["timer_active"] is False
         assert state["timer_end"] is None
+
+
+# ── Randomizer ────────────────────────────────────────────────────────────────
+
+class TestRandomizer:
+    def _make_room(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        return room
+
+    def test_set_randomizer_names_stores_and_resets(self):
+        room = self._make_room()
+        result = room.set_randomizer_names(["Alice", "Bob", "Carol"])
+        assert result is True
+        assert room.randomizer_names == ["Alice", "Bob", "Carol"]
+        assert room.randomizer_remaining == ["Alice", "Bob", "Carol"]
+        assert room.randomizer_last_pick is None
+
+    def test_set_randomizer_names_clears_previous_state(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        room.randomizer_pick()
+        room.set_randomizer_names(["Dave", "Eve"])
+        assert room.randomizer_last_pick is None
+        assert room.randomizer_remaining == ["Dave", "Eve"]
+
+    def test_set_randomizer_names_strips_and_truncates(self):
+        room = self._make_room()
+        room.set_randomizer_names(["  Alice  ", "B" * 60])
+        assert room.randomizer_names[0] == "Alice"
+        assert len(room.randomizer_names[1]) == 50
+
+    def test_set_randomizer_names_max_20(self):
+        room = self._make_room()
+        room.set_randomizer_names([str(i) for i in range(30)])
+        assert len(room.randomizer_names) == 20
+
+    def test_set_randomizer_names_empty_list_returns_false_when_already_empty(self):
+        room = self._make_room()
+        result = room.set_randomizer_names([])
+        assert result is False
+        assert room.randomizer_names == []
+
+    def test_set_randomizer_names_empty_clears_existing(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice"])
+        result = room.set_randomizer_names([])
+        assert result is True
+        assert room.randomizer_names == []
+
+    def test_randomizer_pick_removes_from_remaining(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        assert room.randomizer_pick() is True
+        assert room.randomizer_last_pick in ("Alice", "Bob")
+        assert len(room.randomizer_remaining) == 1
+        assert room.randomizer_last_pick not in room.randomizer_remaining
+
+    def test_randomizer_pick_exhausts_pool_then_stops(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob", "Carol"])
+        picked = []
+        for _ in range(3):
+            room.randomizer_pick()
+            picked.append(room.randomizer_last_pick)
+        # All three should have been picked
+        assert sorted(picked) == ["Alice", "Bob", "Carol"]
+        assert room.randomizer_remaining == []
+        # Next pick should fail — pool exhausted, no auto-reset
+        result = room.randomizer_pick()
+        assert result is False
+
+    def test_randomizer_pick_no_names_returns_false(self):
+        room = self._make_room()
+        assert room.randomizer_pick() is False
+        assert room.randomizer_last_pick is None
+
+    def test_reset_restores_randomizer_pool(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        room.randomizer_pick()
+        assert len(room.randomizer_remaining) == 1
+        room.reset("Alice")
+        assert room.randomizer_remaining == ["Alice", "Bob"]
+        assert room.randomizer_last_pick is None
+
+    def test_build_state_includes_randomizer_fields(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        room.randomizer_pick()
+        state = room.build_state()
+        assert "randomizer_names" in state
+        assert "randomizer_remaining" in state
+        assert "randomizer_last_pick" in state
+        assert state["randomizer_last_pick"] in ("Alice", "Bob")
+        assert len(state["randomizer_remaining"]) == 1
+
+    def test_build_state_randomizer_defaults(self):
+        room = self._make_room()
+        state = room.build_state()
+        assert state["randomizer_names"] == []
+        assert state["randomizer_remaining"] == []
+        assert state["randomizer_last_pick"] is None

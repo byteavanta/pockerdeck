@@ -17,6 +17,8 @@ class RoomApp {
     this._timerInterval = null;
     this._timerDuration = 60;
     this._timerLastEnd = null;
+    this._randomizerEditing = false;
+    this._randomizerSpinning = false;
   }
 
   init() {
@@ -54,6 +56,11 @@ class RoomApp {
       if (self.renamingUser && !e.target.closest('.rename-popover') && !e.target.closest('.btn-icon')) {
         self.renamingUser = null;
         self._renderParticipantsDOM(self.lastState);
+      }
+      // Close randomizer settings menu on outside click
+      var menu = document.getElementById('randomizer-settings-menu');
+      if (menu && !e.target.closest('#randomizer-settings-wrap')) {
+        menu.classList.add('hidden');
       }
     });
 
@@ -215,6 +222,7 @@ class RoomApp {
     this.renderResults(state);
     this.renderDistribution(state);
     this.renderTimer(state);
+    this.renderRandomizer(state);
     this.syncStory(state);
   }
 
@@ -255,6 +263,11 @@ class RoomApp {
     if (prev.timer_active && !state.timer_active) {
       var wasExpired = prev.timer_end && (Date.now() / 1000) >= prev.timer_end;
       if (!wasExpired) this.showToast('⏱ Timer stopped', 'info');
+    }
+
+    // Randomizer pick — toast is delayed until after the spin animation
+    if (state.randomizer_last_pick && state.randomizer_last_pick !== prev.randomizer_last_pick) {
+      this._runSpinAnimation(state.randomizer_last_pick);
     }
   }
 
@@ -1011,4 +1024,203 @@ class RoomApp {
     this.confirmingDeleteBli = null;
     this.send({ action: 'delete_bli', index: index });
   }
+
+  // ── Randomizer ───────────────────────────────────────────────────────────────
+
+  // Returns names of non-viewer participants (excluding self when viewer, but include all non-viewers).
+  _participantNames(state) {
+    if (!state) return [];
+    return Object.entries(state.users)
+      .filter(function(e) { return e[1].role !== 'viewer'; })
+      .map(function(e) { return e[0]; });
+  }
+
+  renderRandomizer(state) {
+    if (!state) return;
+
+    // Merge participant names with any manually added extras.
+    // Participants always come first; extras that don't overlap are appended.
+    var participantNames = this._participantNames(state);
+    var storedNames      = state.randomizer_names || [];
+    // "Extra" names are those in storedNames that aren't current participants
+    var extras = storedNames.filter(function(n) {
+      return participantNames.indexOf(n) === -1;
+    });
+    var allNames  = participantNames.concat(extras);
+    var remaining = state.randomizer_remaining || [];
+    var lastPick  = state.randomizer_last_pick || null;
+    var isAdmin   = this.isAdmin;
+    var isViewer  = (this.userRole === 'viewer');
+    var self      = this;
+
+    // Wheel: show whenever there are names
+    var wheelWrap = document.getElementById('randomizer-wheel-wrap');
+    if (wheelWrap) {
+      if (allNames.length > 0) {
+        wheelWrap.classList.remove('hidden');
+        // If not spinning and not in the middle of an animation, update the centre name
+        if (!this._randomizerSpinning) {
+          var nameEl = document.getElementById('randomizer-wheel-name');
+          if (nameEl && !nameEl.classList.contains('result-pop')) {
+            nameEl.textContent = lastPick || '?';
+          }
+        }
+      } else {
+        wheelWrap.classList.add('hidden');
+      }
+    }
+
+    // Name chips — skip during animation so the picked name isn't revealed early
+    var listEl = document.getElementById('randomizer-names-list');
+    if (listEl && !this._randomizerSpinning) {
+      listEl.innerHTML = '';
+      var effectiveRemainingForChips = (storedNames.length === 0 && allNames.length > 0) ? allNames : remaining;
+      allNames.forEach(function(name) {
+        var chip = document.createElement('span');
+        var used = effectiveRemainingForChips.indexOf(name) === -1;
+        chip.className = 'randomizer-chip' + (used ? ' used' : '');
+        chip.textContent = name;
+        listEl.appendChild(chip);
+      });
+    }
+
+    // Empty state
+    var emptyEl = document.getElementById('randomizer-empty');
+    if (emptyEl) {
+      emptyEl.classList.toggle('hidden', allNames.length > 0 || this._randomizerEditing);
+    }
+
+    // Edit form — admin only; shown when editing
+    var configEl = document.getElementById('randomizer-configure');
+    if (configEl) {
+      configEl.classList.toggle('hidden', !isAdmin || !this._randomizerEditing);
+    }
+
+    // Pick button — non-viewers, only when votes are revealed and pool has names left.
+    // If names have never been synced to the server yet, treat the pool as full.
+    var pickBtn = document.getElementById('randomizer-pick-btn');
+    if (pickBtn) {
+      var effectiveRemaining = (storedNames.length === 0 && allNames.length > 0) ? allNames : remaining;
+      var canPick = allNames.length > 0 && effectiveRemaining.length > 0 && isAdmin && !this._randomizerEditing && (state.revealed || false);
+      pickBtn.classList.toggle('hidden', !canPick);
+    }
+
+    // Settings gear — admin only, not while editing
+    var settingsWrap = document.getElementById('randomizer-settings-wrap');
+    if (settingsWrap) {
+      settingsWrap.classList.toggle('hidden', !isAdmin || this._randomizerEditing);
+    }
+  }
+
+  // Called when a new randomizer_last_pick arrives from the server.
+  // Runs a ~1.5s spin animation then snaps to the result.
+  _runSpinAnimation(pickedName) {
+    var self        = this;
+    var ring        = document.getElementById('randomizer-ring-fill');
+    var ringEl      = document.querySelector('.randomizer-ring');
+    var nameEl      = document.getElementById('randomizer-wheel-name');
+    if (!ring || !ringEl || !nameEl) return;
+
+    this._randomizerSpinning = true;
+
+    // Phase 1 — spin for 1.4 s
+    ring.classList.remove('result-glow');
+    ringEl.classList.add('spinning');
+    nameEl.classList.add('spinning');
+    nameEl.classList.remove('result-pop');
+
+    // Rapid name flicker during spin
+    var names = this._participantNames(this.lastState);
+    var storedNames = (this.lastState && this.lastState.randomizer_names) || [];
+    var extras = storedNames.filter(function(n) { return names.indexOf(n) === -1; });
+    var allNames = names.concat(extras);
+    var flickerNames = allNames.length > 1 ? allNames : [pickedName];
+    var flickerIdx   = 0;
+    var flickerTimer = setInterval(function() {
+      nameEl.textContent = flickerNames[flickerIdx % flickerNames.length];
+      flickerIdx++;
+    }, 100);
+
+    setTimeout(function() {
+      // Phase 2 — reveal result
+      clearInterval(flickerTimer);
+      ringEl.classList.remove('spinning');
+      ring.classList.add('result-glow');
+      nameEl.classList.remove('spinning');
+      nameEl.textContent = pickedName;
+      nameEl.classList.add('result-pop');
+      self._randomizerSpinning = false;
+      self.showToast('🎲 Reviewer: ' + pickedName, 'success');
+
+      // Clean up pop class after animation completes, then reveal updated chips
+      setTimeout(function() {
+        nameEl.classList.remove('result-pop');
+        self.renderRandomizer(self.lastState);
+      }, 500);
+    }, 1400);
+  }
+
+  toggleRandomizerSettings(e) {
+    e.stopPropagation();
+    var menu = document.getElementById('randomizer-settings-menu');
+    if (menu) menu.classList.toggle('hidden');
+  }
+
+  openRandomizerEdit() {
+    this._randomizerEditing = true;
+    var input = document.getElementById('randomizer-input');
+    if (input && this.lastState) {
+      // Pre-fill with the stored extras (not participant names, which are auto-added)
+      var participantNames = this._participantNames(this.lastState);
+      var extras = (this.lastState.randomizer_names || []).filter(function(n) {
+        return participantNames.indexOf(n) === -1;
+      });
+      input.value = extras.join('\n');
+    }
+    this.renderRandomizer(this.lastState);
+    setTimeout(function() {
+      var el = document.getElementById('randomizer-input');
+      if (el) { el.focus(); }
+    }, 0);
+  }
+
+  cancelRandomizerEdit() {
+    this._randomizerEditing = false;
+    this.renderRandomizer(this.lastState);
+  }
+
+  saveRandomizerNames() {
+    var input = document.getElementById('randomizer-input');
+    if (!input) return;
+    // Merge current participant names with manually entered extras
+    var participantNames = this._participantNames(this.lastState);
+    var extras = input.value.split('\n')
+      .map(function(n) { return n.trim(); })
+      .filter(function(n) { return n.length > 0; });
+    // Deduplicate: extras that are already a participant get dropped
+    var uniqueExtras = extras.filter(function(n) {
+      return participantNames.indexOf(n) === -1;
+    });
+    var allNames = participantNames.concat(uniqueExtras);
+    this._randomizerEditing = false;
+    this.send({ action: 'set_randomizer_names', names: allNames });
+  }
+
+  randomPickReviewer() {
+    // Sync the current name list (participants + extras) to the server before picking,
+    // so the server always has the latest participant set.
+    var participantNames = this._participantNames(this.lastState);
+    var storedNames = (this.lastState && this.lastState.randomizer_names) || [];
+    var extras = storedNames.filter(function(n) { return participantNames.indexOf(n) === -1; });
+    var allNames = participantNames.concat(extras);
+    // Only update if the list has changed
+    var stored = JSON.stringify(storedNames);
+    var current = JSON.stringify(allNames);
+    var self = this;
+    if (stored !== current) {
+      this.send({ action: 'set_randomizer_names', names: allNames });
+    }
+    this.send({ action: 'randomizer_pick' });
+  }
 }
+

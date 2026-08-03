@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -23,6 +24,9 @@ class Room:
     backlog: List[BacklogItem] = field(default_factory=list)
     timer_end: Optional[float] = None
     timer_active: bool = False
+    randomizer_names: List[str] = field(default_factory=list)
+    randomizer_remaining: List[str] = field(default_factory=list)
+    randomizer_last_pick: Optional[str] = None
 
     @classmethod
     def create(cls, room_id: str, backlog_raw: str = "", cards_raw: str = "") -> "Room":
@@ -111,6 +115,8 @@ class Room:
         self.story = str(story)[:500]
         for participant in self.participants.values():
             participant.vote = None
+        self.randomizer_remaining = list(self.randomizer_names)
+        self.randomizer_last_pick = None
         logger.debug("Room %s: round reset by '%s'", self.id, user_name)
         return True
 
@@ -188,6 +194,24 @@ class Room:
         logger.debug("Room %s: timer stopped", self.id)
         return True
 
+    def set_randomizer_names(self, names: List[str]) -> bool:
+        names = [str(n).strip()[:50] for n in names if str(n).strip()][:20]
+        if not names and not self.randomizer_names:
+            return False
+        self.randomizer_names = names
+        self.randomizer_remaining = list(names)
+        self.randomizer_last_pick = None
+        return True
+
+    def randomizer_pick(self) -> bool:
+        if not self.randomizer_names or not self.randomizer_remaining:
+            return False
+        pick = random.choice(self.randomizer_remaining)
+        self.randomizer_remaining.remove(pick)
+        self.randomizer_last_pick = pick
+        logger.debug("Room %s: randomizer picked '%s'", self.id, pick)
+        return True
+
     def build_state(self) -> dict:
         users: Dict[str, dict] = {}
         for name, p in self.participants.items():
@@ -202,4 +226,7 @@ class Room:
             "active_bli": self.active_bli,
             "timer_end": self.timer_end,
             "timer_active": self.timer_active,
+            "randomizer_names": self.randomizer_names,
+            "randomizer_remaining": self.randomizer_remaining,
+            "randomizer_last_pick": self.randomizer_last_pick,
         }

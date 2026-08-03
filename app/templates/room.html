@@ -97,6 +97,53 @@
       </div>
     </div>
 
+    <!-- Reviewer Randomizer panel -->
+    <div id="randomizer-panel" class="panel">
+      <div class="panel-title-row">
+        <span class="panel-title">Reviewer Randomizer</span>
+        <div id="randomizer-settings-wrap" class="randomizer-settings-wrap hidden">
+          <button id="randomizer-settings-btn" class="randomizer-kebab-btn"
+            onclick="app.toggleRandomizerSettings(event)" title="Randomizer settings">⋮</button>
+          <div id="randomizer-settings-menu" class="randomizer-settings-menu hidden">
+            <button type="button" class="randomizer-menu-item"
+              onclick="app.openRandomizerEdit()">+ Add names</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spinner wheel -->
+      <div id="randomizer-wheel-wrap" class="randomizer-wheel-wrap hidden">
+        <div id="randomizer-wheel" class="randomizer-wheel">
+          <svg class="randomizer-ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="randomizer-ring-track" cx="60" cy="60" r="52" />
+            <circle id="randomizer-ring-fill" class="randomizer-ring-fill" cx="60" cy="60" r="52" />
+          </svg>
+          <div id="randomizer-wheel-name" class="randomizer-wheel-name">?</div>
+        </div>
+      </div>
+
+      <!-- Name chips -->
+      <div id="randomizer-names-list" class="randomizer-names-list"></div>
+      <p id="randomizer-empty" class="empty-state hidden">No names set yet</p>
+
+      <!-- Edit form (admin only) -->
+      <div id="randomizer-configure" class="randomizer-configure hidden">
+        <div class="randomizer-configure-hint">One name per line. Participants are added automatically.</div>
+        <textarea id="randomizer-input" class="randomizer-textarea"
+          placeholder="Extra names…" rows="3"></textarea>
+        <div class="randomizer-configure-row">
+          <button type="button" class="btn btn-primary" onclick="app.saveRandomizerNames()">Save</button>
+          <button type="button" class="btn btn-secondary" onclick="app.cancelRandomizerEdit()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="randomizer-actions">
+        <button id="randomizer-pick-btn" class="btn btn-primary hidden"
+          onclick="app.randomPickReviewer()">Pick Reviewer</button>
+      </div>
+    </div>
+
     <!-- Story / Task description -->
     <div class="panel">
       <div class="panel-title">Story / Task</div>

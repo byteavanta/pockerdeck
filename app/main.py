@@ -155,6 +155,14 @@ async def websocket_endpoint(
             elif action == "stop_timer" and is_admin:
                 changed = room.stop_timer()
 
+            elif action == "set_randomizer_names" and is_admin:
+                names = data.get("names", [])
+                if isinstance(names, list):
+                    changed = room.set_randomizer_names(names)
+
+            elif action == "randomizer_pick" and is_admin:
+                changed = room.randomizer_pick()
+
             if changed:
                 await conn_manager.broadcast(room_id, room.build_state())
 
