@@ -20,48 +20,18 @@
 </head>
 <body class="home-body">
   <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme" aria-label="Toggle theme" aria-pressed="false">🌙</button>
+
   <div class="hero">
     <div class="hero-content">
       <div class="hero-logo">🃏</div>
       <h1>PockerDeck</h1>
-      <p>
-        Simple planning poker for agile teams.<br />
-        Create a room, share the link — no sign-up needed.
-      </p>
+      <p>Planning poker for agile teams.<br />No sign-up. No friction. Just vote.</p>
 
-      <form id="create-form" action="/create-room" method="post">
-        <div class="estimation-section">
-          <div class="estimation-section-header">
-            <span class="estimation-section-label">🃏 Estimation Type</span>
-          </div>
-          <div class="est-type-row">
-            <button type="button" class="est-type-btn selected" data-type="fibonacci" onclick="pickEstType(this)">📊 Story Points</button>
-            <button type="button" class="est-type-btn" data-type="tshirt" onclick="pickEstType(this)">👕 T-shirt</button>
-            <button type="button" class="est-type-btn" data-type="hours" onclick="pickEstType(this)">⏱ Hours</button>
-            <button type="button" class="est-type-btn" data-type="custom" onclick="pickEstType(this)">✏️ Custom</button>
-          </div>
-          <div id="cards-editor" class="cards-editor"></div>
-          <div class="card-add-row">
-            <input type="text" id="card-input" placeholder="Add a card value…" maxlength="8" autocomplete="off" />
-            <button type="button" onclick="addCard()" class="btn btn-secondary">Add</button>
-          </div>
-          <input type="hidden" name="cards" id="cards-data" />
-        </div>
-
-        <div class="backlog-create">
-          <div class="backlog-create-header">
-            <span class="backlog-create-label">📋 Backlog Items</span>
-            <span class="backlog-create-hint">Optional — add stories to vote on</span>
-          </div>
-          <div class="backlog-input-row">
-            <input type="text" id="bli-input" placeholder="Add a backlog item…" maxlength="200" autocomplete="off" />
-            <button type="button" onclick="addBli()" class="btn btn-secondary">Add</button>
-          </div>
-          <ul id="bli-list" class="bli-list"></ul>
-          <input type="hidden" name="backlog" id="backlog-data" value="[]" />
-        </div>
-        <button type="submit" class="btn btn-primary btn-large btn-full" onclick="prepareForm()">+ Create Room</button>
-      </form>
+      <div class="hero-actions">
+        <form action="/create-room" method="post">
+          <button type="submit" class="btn btn-primary btn-large">Create a Room</button>
+        </form>
+      </div>
 
       <div class="divider"><span>or join with a code</span></div>
 
@@ -74,10 +44,36 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <button onclick="joinByCode()" class="btn btn-secondary">Join →</button>
+        <button onclick="joinByCode()" class="btn btn-secondary">Join</button>
       </div>
     </div>
   </div>
+
+  <section class="home-features">
+    <div class="home-features-grid">
+      <div class="home-feature-card">
+        <div class="home-feature-icon">⚡</div>
+        <div class="home-feature-text">
+          <div class="home-feature-title">Instant rooms</div>
+          <div class="home-feature-desc">Create a session in one click. Share the link. Done.</div>
+        </div>
+      </div>
+      <div class="home-feature-card">
+        <div class="home-feature-icon">🔄</div>
+        <div class="home-feature-text">
+          <div class="home-feature-title">Real-time sync</div>
+          <div class="home-feature-desc">Votes and reveals stay in sync for everyone, instantly.</div>
+        </div>
+      </div>
+      <div class="home-feature-card">
+        <div class="home-feature-icon">📋</div>
+        <div class="home-feature-text">
+          <div class="home-feature-title">Built-in backlog</div>
+          <div class="home-feature-desc">Queue up stories before the session. Work through them one by one.</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <script>
     document.getElementById('room-code').addEventListener('keydown', function (e) {
@@ -87,128 +83,6 @@
     function joinByCode() {
       var code = document.getElementById('room-code').value.trim();
       if (code) window.location.href = '/room/' + encodeURIComponent(code);
-    }
-
-    // ── Estimation type & card editor ────────────────────────────────────
-    var PRESETS = {
-      fibonacci: ['1', '2', '3', '5', '8', '13', '21', '34', '55', '?'],
-      tshirt:    ['XS', 'S', 'M', 'L', 'XL', 'XXL', '?'],
-      hours:     ['3', '6', '9', '12', '15', '18', '21', '24', '27', '30', '30+', '?'],
-    };
-
-    var currentCards = PRESETS.fibonacci.slice();
-
-    // render initial state
-    document.addEventListener('DOMContentLoaded', function () {
-      renderCardChips();
-      document.getElementById('card-input').addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); addCard(); }
-      });
-    });
-
-    function pickEstType(btn) {
-      document.querySelectorAll('.est-type-btn').forEach(function (b) {
-        b.classList.remove('selected');
-      });
-      btn.classList.add('selected');
-      var type = btn.dataset.type;
-      if (type !== 'custom') {
-        currentCards = PRESETS[type].slice();
-        renderCardChips();
-      }
-    }
-
-    function addCard() {
-      var input = document.getElementById('card-input');
-      var val = input.value.trim();
-      if (!val || val.length > 8) return;
-      if (currentCards.indexOf(val) !== -1) return;
-      currentCards.push(val);
-      input.value = '';
-      renderCardChips();
-      input.focus();
-      // switch to custom mode
-      document.querySelectorAll('.est-type-btn').forEach(function (b) {
-        b.classList.toggle('selected', b.dataset.type === 'custom');
-      });
-    }
-
-    function removeCard(index) {
-      currentCards.splice(index, 1);
-      renderCardChips();
-    }
-
-    function renderCardChips() {
-      var editor = document.getElementById('cards-editor');
-      editor.innerHTML = '';
-      currentCards.forEach(function (val, i) {
-        var chip = document.createElement('span');
-        chip.className = 'card-chip';
-        var text = document.createElement('span');
-        text.textContent = val;
-        var rm = document.createElement('button');
-        rm.type = 'button';
-        rm.className = 'card-chip-remove';
-        rm.textContent = '×';
-        rm.onclick = function () { removeCard(i); };
-        chip.appendChild(text);
-        chip.appendChild(rm);
-        editor.appendChild(chip);
-      });
-    }
-
-    // ── Backlog items ────────────────────────────────────────────────────
-    var bliItems = [];
-
-    document.addEventListener('DOMContentLoaded', function () {
-      document.getElementById('bli-input').addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); addBli(); }
-      });
-    });
-
-    function addBli() {
-      var input = document.getElementById('bli-input');
-      var val = input.value.trim();
-      if (!val) return;
-      bliItems.push(val);
-      input.value = '';
-      renderBliList();
-      input.focus();
-    }
-
-    function removeBli(index) {
-      bliItems.splice(index, 1);
-      renderBliList();
-    }
-
-    function renderBliList() {
-      var list = document.getElementById('bli-list');
-      list.innerHTML = '';
-      bliItems.forEach(function (item, i) {
-        var li = document.createElement('li');
-        li.className = 'bli-item';
-        var num = document.createElement('span');
-        num.className = 'bli-num';
-        num.textContent = (i + 1) + '.';
-        var text = document.createElement('span');
-        text.className = 'bli-title';
-        text.textContent = item;
-        var del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'bli-remove';
-        del.textContent = '✕';
-        del.onclick = function () { removeBli(i); };
-        li.appendChild(num);
-        li.appendChild(text);
-        li.appendChild(del);
-        list.appendChild(li);
-      });
-    }
-
-    function prepareForm() {
-      var cards = currentCards.length >= 1 ? currentCards : PRESETS.fibonacci;
-      document.getElementById('cards-data').value = JSON.stringify(cards);
-      document.getElementById('backlog-data').value = JSON.stringify(bliItems);
     }
 
     function toggleTheme() {

@@ -26,10 +26,42 @@
 
   <!-- ── Name entry modal (visible by default; hidden by JS for returning users) ── -->
   <div id="name-modal" class="modal-overlay">
-    <div class="modal">
+    <div class="modal{% if is_creator %} modal-creator{% endif %}">
       <div class="modal-emoji">🃏</div>
-      <h2>Join Session</h2>
-      <p>Enter your name to join the planning session</p>
+      <h2>{% if is_creator %}Set up your room{% else %}Join Session{% endif %}</h2>
+      <p>{% if is_creator %}Configure your session, then enter your name to start{% else %}Enter your name to join the planning session{% endif %}</p>
+
+      {% if is_creator %}
+      <div class="modal-config">
+        <div class="modal-config-section">
+          <div class="modal-config-label">Estimation Type</div>
+          <div class="est-type-row">
+            <button type="button" class="est-type-btn selected" data-type="fibonacci" onclick="pickEstType(this)">Story Points</button>
+            <button type="button" class="est-type-btn" data-type="tshirt" onclick="pickEstType(this)">T-shirt</button>
+            <button type="button" class="est-type-btn" data-type="hours" onclick="pickEstType(this)">Hours</button>
+            <button type="button" class="est-type-btn" data-type="custom" onclick="pickEstType(this)">Custom</button>
+          </div>
+          <div id="cards-editor" class="cards-editor"></div>
+          <div class="card-add-row">
+            <input type="text" id="card-input" placeholder="Add a card value…" maxlength="8" autocomplete="off" />
+            <button type="button" onclick="addCard()" class="btn btn-secondary">Add</button>
+          </div>
+        </div>
+
+        <div class="modal-config-section">
+          <div class="modal-config-label">
+            Backlog Items
+            <span class="modal-config-hint">Optional</span>
+          </div>
+          <div class="backlog-input-row">
+            <input type="text" id="bli-input" placeholder="Add a story or task…" maxlength="200" autocomplete="off" />
+            <button type="button" onclick="addBli()" class="btn btn-secondary">Add</button>
+          </div>
+          <ul id="bli-list" class="bli-list"></ul>
+        </div>
+      </div>
+      {% endif %}
+
       <input
         type="text"
         id="name-input"
@@ -50,7 +82,7 @@
         </label>
       </div>
       <div class="modal-btn-row">
-        <button onclick="app.submitName()" class="btn btn-primary btn-full">Join →</button>
+        <button onclick="app.submitName()" class="btn btn-primary btn-full">{% if is_creator %}Start Session →{% else %}Join →{% endif %}</button>
         {% if is_creator %}<button onclick="app.submitNameAsSpectator()" class="btn btn-secondary btn-full">Join as Spectator →</button>{% endif %}
       </div>
     </div>
