@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 from models.constants import DEFAULT_CARDS
 from models.backlog_item import BacklogItem
 from models.participant import Participant
+from models.room_settings import RoomSettings
 
 logger = logging.getLogger("pockerdeck.room")
 
@@ -29,6 +30,7 @@ class Room:
     randomizer_remaining: List[str] = field(default_factory=list)
     randomizer_last_pick: Optional[str] = None
     randomizer_excluded: List[str] = field(default_factory=list)
+    settings: RoomSettings = field(default_factory=RoomSettings)
 
     @classmethod
     def create(cls, room_id: str, backlog_raw: str = "", cards_raw: str = "") -> "Room":
@@ -101,6 +103,8 @@ class Room:
         p = self.participants.get(user_name)
         if not p or p.role not in ("admin", "user"):
             return False
+        if not self.settings.allow_vote_change and p.vote is not None:
+            return False
         if value is None or value == "":
             p.vote = None
         else:
@@ -111,6 +115,8 @@ class Room:
     def reveal(self, user_name: str) -> bool:
         p = self.participants.get(user_name)
         if not p or not (p.role in ("admin", "user") or (p.role == "viewer" and self.admin == user_name)):
+            return False
+        if self.settings.admin_only_reveal and user_name != self.admin:
             return False
         self.revealed = True
         if self.active_bli is not None and 0 <= self.active_bli < len(self.backlog):
@@ -311,7 +317,7 @@ class Room:
         logger.debug("Room %s: randomizer picked '%s'", self.id, pick)
         return True
 
-    def configure(self, cards_raw: str, backlog_raw: str) -> bool:
+    def configure(self, cards_raw: str, backlog_raw: str, settings_raw: dict = None) -> bool:
         card_list = None
         if cards_raw:
             try:
@@ -341,8 +347,37 @@ class Room:
             except Exception:
                 pass
 
+        if settings_raw:
+            self._apply_settings(settings_raw)
+
         logger.debug("Room %s: configured cards=%d backlog=%d", self.id, len(self.cards), len(self.backlog))
         return True
+
+    def update_settings(self, settings_raw: dict) -> bool:
+        if not settings_raw or not isinstance(settings_raw, dict):
+            return False
+        self._apply_settings(settings_raw)
+        logger.debug("Room %s: settings updated", self.id)
+        return True
+
+    def _apply_settings(self, raw: dict) -> None:
+        if "randomizer_enabled" in raw:
+            self.settings.randomizer_enabled = bool(raw["randomizer_enabled"])
+        if "backlog_enabled" in raw:
+            self.settings.backlog_enabled = bool(raw["backlog_enabled"])
+        if "no_viewers" in raw:
+            self.settings.no_viewers = bool(raw["no_viewers"])
+        if "admin_only_share" in raw:
+            self.settings.admin_only_share = bool(raw["admin_only_share"])
+        if "admin_only_reveal" in raw:
+            self.settings.admin_only_reveal = bool(raw["admin_only_reveal"])
+        if "auto_reveal" in raw:
+            self.settings.auto_reveal = bool(raw["auto_reveal"])
+        if "allow_vote_change" in raw:
+            self.settings.allow_vote_change = bool(raw["allow_vote_change"])
+        if "password" in raw:
+            pw = raw["password"]
+            self.settings.password = str(pw)[:64] if pw else None
 
     def build_state(self) -> dict:
         users: Dict[str, dict] = {}
@@ -362,4 +397,14 @@ class Room:
             "randomizer_remaining": self.randomizer_remaining,
             "randomizer_last_pick": self.randomizer_last_pick,
             "randomizer_excluded": self.randomizer_excluded,
+            "settings": {
+                "randomizer_enabled": self.settings.randomizer_enabled,
+                "backlog_enabled":    self.settings.backlog_enabled,
+                "password_required":  self.settings.password is not None,
+                "no_viewers":         self.settings.no_viewers,
+                "admin_only_share":   self.settings.admin_only_share,
+                "admin_only_reveal":  self.settings.admin_only_reveal,
+                "auto_reveal":        self.settings.auto_reveal,
+                "allow_vote_change":  self.settings.allow_vote_change,
+            },
         }

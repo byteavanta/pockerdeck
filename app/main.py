@@ -64,6 +64,8 @@ async def room_page(request: Request, room_id: str, creator: str = Query(default
             "is_spectator": False,
             "cards": room.cards,
             "js_hash": JS_HASH,
+            "password_required": room.settings.password is not None,
+            "no_viewers": room.settings.no_viewers,
         },
     )
 
@@ -76,11 +78,24 @@ async def websocket_endpoint(
     room_id: str,
     user_name: str,
     role: str = Query(default="user"),
+    password: str = Query(default=""),
 ):
     room = room_manager.get_room(room_id)
     if room is None:
         logger.warning("WebSocket connection to nonexistent room: %s", room_id)
         await websocket.close(code=4004)
+        return
+
+    if room.settings.password and password != room.settings.password:
+        logger.warning("Wrong password for room %s from user '%s'", room_id, user_name)
+        await websocket.accept()
+        await websocket.close(code=4006)
+        return
+
+    if room.settings.no_viewers and role == "viewer":
+        logger.warning("Viewer blocked by no_viewers setting in room %s", room_id)
+        await websocket.accept()
+        await websocket.close(code=4007)
         return
 
     user_name = user_name.strip()[:32] or "Anonymous"
@@ -107,6 +122,14 @@ async def websocket_endpoint(
 
             if action == "vote":
                 changed = room.vote(user_name, data.get("value", ""))
+                if changed and room.settings.auto_reveal and not room.revealed:
+                    all_voted = all(
+                        p.vote is not None
+                        for p in room.participants.values()
+                        if p.role != "viewer"
+                    )
+                    if all_voted:
+                        room.reveal(user_name)
 
             elif action == "reveal":
                 changed = room.reveal(user_name)
@@ -176,7 +199,11 @@ async def websocket_endpoint(
                 changed = room.configure(
                     cards_raw=str(data.get("cards", "")),
                     backlog_raw=str(data.get("backlog", "")),
+                    settings_raw=data.get("settings") or {},
                 )
+
+            elif action == "update_settings" and is_admin:
+                changed = room.update_settings(data.get("settings", {}))
 
             if changed:
                 await conn_manager.broadcast(room_id, room.build_state())

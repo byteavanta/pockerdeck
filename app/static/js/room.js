@@ -1,9 +1,11 @@
 class RoomApp {
-  constructor(roomId, isCreator, cards, isSpectator) {
+  constructor(roomId, isCreator, cards, isSpectator, passwordRequired, noViewers) {
     this.roomId = roomId;
     this.isCreator = isCreator;
     this.isSpectator = isSpectator || false;
     this.cards = cards;
+    this.passwordRequired = passwordRequired || false;
+    this.noViewers = noViewers || false;
     this.userName = null;
     this.userRole = 'user';
     this.isAdmin = false;
@@ -20,9 +22,11 @@ class RoomApp {
     this._timerLastEnd = null;
     this._randomizerEditing = false;
     this._randomizerSpinning = false;
+    this._settings = null;
     // Creator config (estimation + backlog), set in modal before joining
     this._configCards = null;
     this._configBacklog = null;
+    this._configSettings = null;
   }
 
   init() {
@@ -34,6 +38,12 @@ class RoomApp {
     if (this.isCreator || this.isSpectator || savedSpectator) {
       var roleSelector = document.getElementById('role-selector');
       if (roleSelector) roleSelector.style.display = 'none';
+    }
+
+    // Hide viewer role option if room disallows viewers
+    if (this.noViewers) {
+      var viewerLabel = document.querySelector('.role-option input[value="viewer"]');
+      if (viewerLabel) viewerLabel.closest('.role-option').style.display = 'none';
     }
 
     var nameInput = document.getElementById('name-input');
@@ -109,6 +119,15 @@ class RoomApp {
     };
     this._configCards = PRESETS.fibonacci.slice();
     this._configBacklog = [];
+    this._configSettings = {
+      backlog_enabled:    true,
+      randomizer_enabled: true,
+      no_viewers:         false,
+      admin_only_share:   false,
+      admin_only_reveal:  false,
+      auto_reveal:        false,
+      password:           null,
+    };
 
     this._renderCardChips();
 
@@ -124,6 +143,23 @@ class RoomApp {
         if (e.key === 'Enter') { e.preventDefault(); self._addConfigBli(); }
       });
     }
+
+    // Sync setting toggles to _configSettings
+    var settingMap = {
+      'setting-backlog':       'backlog_enabled',
+      'setting-randomizer':    'randomizer_enabled',
+      'setting-no-viewers':    'no_viewers',
+      'setting-admin-share':   'admin_only_share',
+      'setting-admin-reveal':  'admin_only_reveal',
+      'setting-auto-reveal':   'auto_reveal',
+    };
+    Object.keys(settingMap).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', function () {
+        self._configSettings[settingMap[id]] = el.checked;
+      });
+    });
 
     // Expose globals the onclick handlers in template need
     window.pickEstType = function (btn) {
@@ -247,6 +283,11 @@ class RoomApp {
     if (this.isSpectator) {
       sessionStorage.setItem('spectator_' + this.roomId, '1');
     }
+    // Capture password entered in join modal
+    var pwInput = document.getElementById('room-password-input');
+    if (pwInput && pwInput.value) {
+      this._roomPassword = pwInput.value;
+    }
     document.getElementById('name-modal').classList.add('hidden');
     this.showApp();
     this.connect();
@@ -260,6 +301,14 @@ class RoomApp {
     var self = this;
     var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     var url = protocol + '//' + location.host + '/ws/' + this.roomId + '/' + encodeURIComponent(this.userName) + '?role=' + encodeURIComponent(this.userRole);
+    if (this.passwordRequired || this._roomPassword) {
+      var pw = this._roomPassword || '';
+      if (!pw) {
+        var pwInput = document.getElementById('room-password-input');
+        if (pwInput) pw = pwInput.value;
+      }
+      if (pw) url += '&password=' + encodeURIComponent(pw);
+    }
     this.setStatus('connecting', 'Connecting…');
     this.ws = new WebSocket(url);
 
@@ -268,13 +317,24 @@ class RoomApp {
       // Creator sends room config on first join (not on reconnect)
       if (self.isCreator && self._configCards && !self._configSent) {
         self._configSent = true;
+        // Read password from settings toggle
+        if (self._configSettings) {
+          var pwToggle = document.getElementById('setting-password-toggle');
+          var pwField  = document.getElementById('setting-password');
+          if (pwToggle && pwToggle.checked && pwField && pwField.value) {
+            self._configSettings.password = pwField.value;
+            self._roomPassword = pwField.value;
+          }
+        }
         var cards   = self._configCards.length ? self._configCards : null;
         var backlog = self._configBacklog && self._configBacklog.length ? self._configBacklog : null;
-        if (cards || backlog) {
+        var settings = self._configSettings || null;
+        if (cards || backlog || settings) {
           self.send({
-            action:  'configure',
-            cards:   cards   ? JSON.stringify(cards)   : '',
-            backlog: backlog ? JSON.stringify(backlog) : '',
+            action:   'configure',
+            cards:    cards   ? JSON.stringify(cards)   : '',
+            backlog:  backlog ? JSON.stringify(backlog) : '',
+            settings: settings || {},
           });
           // Update local card grid if cards changed
           if (cards) {
@@ -320,6 +380,29 @@ class RoomApp {
         self.shouldReconnect = false;
         self.showToast('You were removed from the room.', 'warning');
         setTimeout(function () { window.location.href = '/'; }, 2000);
+        return;
+      }
+      if (event.code === 4006) {
+        self.shouldReconnect = false;
+        self._roomPassword = null;
+        document.getElementById('app').classList.add('hidden');
+        var modal = document.getElementById('name-modal');
+        modal.classList.remove('hidden');
+        var pwInput = document.getElementById('room-password-input');
+        if (pwInput) {
+          pwInput.value = '';
+          pwInput.classList.add('error');
+          pwInput.focus();
+        }
+        self.showToast('Incorrect password.', 'error');
+        return;
+      }
+      if (event.code === 4007) {
+        self.shouldReconnect = false;
+        document.getElementById('app').classList.add('hidden');
+        var modal = document.getElementById('name-modal');
+        modal.classList.remove('hidden');
+        self.showToast('This room does not allow viewers.', 'error');
         return;
       }
       self.setStatus('disconnected', 'Reconnecting…');
@@ -370,6 +453,10 @@ class RoomApp {
       this.myVote = null;
     }
 
+    if (state.settings) {
+      this._settings = state.settings;
+    }
+
     // Toast diffing
     if (this.lastState) {
       this._diffToasts(state);
@@ -377,6 +464,10 @@ class RoomApp {
 
     var prevState = this.lastState;
     this.lastState = state;
+
+    // Gear button visible only to admin
+    var settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) settingsBtn.classList.toggle('hidden', !this.isAdmin);
 
     this.renderBacklog(state);
     this.renderParticipants(state, prevState);
@@ -733,12 +824,31 @@ class RoomApp {
     var storyBtn      = document.getElementById('story-btn');
     var storyText     = document.getElementById('story-text');
     var timerPicker = document.getElementById('timer-picker');
+    var copyBtn     = document.getElementById('copy-btn');
+    var roomIdText  = document.getElementById('room-id-text');
 
     var isViewer = (this.userRole === 'viewer');
     var canAct   = !isViewer || this.isAdmin;
+    var settings = state.settings || {};
 
     storyText.readOnly = isViewer && !this.isAdmin;
     storyBtn.classList.toggle('hidden', isViewer && !this.isAdmin);
+
+    // Admin-only share: hide copy button and obfuscate room code for non-admins
+    if (copyBtn) copyBtn.classList.toggle('hidden', !!(settings.admin_only_share && !this.isAdmin));
+    if (roomIdText) {
+      if (settings.admin_only_share && !this.isAdmin) {
+        if (!roomIdText.dataset.obfuscated) {
+          roomIdText.dataset.obfuscated = '1';
+          roomIdText.innerHTML = '<span class="room-id-badge">••••••••</span>';
+        }
+      } else {
+        if (roomIdText.dataset.obfuscated) {
+          delete roomIdText.dataset.obfuscated;
+          roomIdText.innerHTML = '<span class="room-id-badge">' + this.roomId + '</span>';
+        }
+      }
+    }
 
     if (state.revealed) {
       cardsPanel.classList.add('hidden');
@@ -750,9 +860,11 @@ class RoomApp {
       });
     } else {
       cardsPanel.classList.toggle('hidden', isViewer);
-      revealBtn.classList.toggle('hidden', !canAct);
+      // Admin-only reveal: hide reveal button for non-admins
+      var canReveal = canAct && !(settings.admin_only_reveal && !this.isAdmin);
+      revealBtn.classList.toggle('hidden', !canReveal);
       resetBtn.classList.add('hidden');
-      timerPicker.classList.toggle('hidden', !isAdmin || state.timer_active);
+      timerPicker.classList.toggle('hidden', !this.isAdmin || state.timer_active);
 
       if (!isViewer) {
         var myVote = this.myVote;
@@ -919,11 +1031,19 @@ class RoomApp {
   renderBacklog(state) {
     var self = this;
     this.lastState = state;
+    var panel    = document.getElementById('backlog-panel');
     var list     = document.getElementById('backlog-list');
     var addRow   = document.getElementById('backlog-add-row');
     var emptyMsg = document.getElementById('backlog-empty');
     var backlog = state.backlog || [];
     var isAdmin = this.isAdmin;
+
+    // Hide entire panel when disabled
+    if (state.settings && !state.settings.backlog_enabled) {
+      if (panel) panel.classList.add('hidden');
+      return;
+    }
+    if (panel) panel.classList.remove('hidden');
 
     addRow.classList.toggle('hidden', !isAdmin);
     list.innerHTML = '';
@@ -1274,6 +1394,13 @@ class RoomApp {
   renderRandomizer(state) {
     if (!state) return;
 
+    var randomizerPanel = document.getElementById('randomizer-panel');
+    if (state.settings && !state.settings.randomizer_enabled) {
+      if (randomizerPanel) randomizerPanel.classList.add('hidden');
+      return;
+    }
+    if (randomizerPanel) randomizerPanel.classList.remove('hidden');
+
     var allNames  = state.randomizer_names || [];
     var remaining = state.randomizer_remaining || [];
     var excluded  = state.randomizer_excluded || [];
@@ -1481,6 +1608,71 @@ class RoomApp {
 
   randomPickReviewer() {
     this.send({ action: 'randomizer_pick' });
+  }
+
+  // ── Room Settings panel (admin only) ────────────────────────────────────────
+
+  openSettingsPanel() {
+    var s = this._settings || {};
+    var fields = {
+      'sp-backlog':       'backlog_enabled',
+      'sp-randomizer':    'randomizer_enabled',
+      'sp-no-viewers':    'no_viewers',
+      'sp-admin-share':   'admin_only_share',
+      'sp-admin-reveal':  'admin_only_reveal',
+      'sp-auto-reveal':   'auto_reveal',
+    };
+    Object.keys(fields).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.checked = !!s[fields[id]];
+    });
+    var pwToggle = document.getElementById('sp-password-toggle');
+    var pwWrap   = document.getElementById('sp-password-field-wrap');
+    var pwField  = document.getElementById('sp-password');
+    if (pwToggle) pwToggle.checked = !!s.password_required;
+    if (pwWrap)   pwWrap.classList.toggle('hidden', !s.password_required);
+    if (pwField)  pwField.value = '';
+    document.getElementById('settings-overlay').classList.remove('hidden');
+  }
+
+  closeSettingsPanel() {
+    document.getElementById('settings-overlay').classList.add('hidden');
+  }
+
+  toggleSettingsPwField(cb) {
+    var wrap = document.getElementById('sp-password-field-wrap');
+    if (!wrap) return;
+    wrap.classList.toggle('hidden', !cb.checked);
+    if (cb.checked) {
+      var f = document.getElementById('sp-password');
+      if (f) f.focus();
+    }
+  }
+
+  saveSettings() {
+    var fields = {
+      'sp-backlog':       'backlog_enabled',
+      'sp-randomizer':    'randomizer_enabled',
+      'sp-no-viewers':    'no_viewers',
+      'sp-admin-share':   'admin_only_share',
+      'sp-admin-reveal':  'admin_only_reveal',
+      'sp-auto-reveal':   'auto_reveal',
+    };
+    var settings = {};
+    Object.keys(fields).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) settings[fields[id]] = el.checked;
+    });
+    var pwToggle = document.getElementById('sp-password-toggle');
+    var pwField  = document.getElementById('sp-password');
+    if (pwToggle && pwToggle.checked && pwField && pwField.value) {
+      settings.password = pwField.value;
+      this._roomPassword = pwField.value;
+    } else if (pwToggle && !pwToggle.checked) {
+      settings.password = '';
+    }
+    this.send({ action: 'update_settings', settings: settings });
+    this.closeSettingsPanel();
   }
 }
 
