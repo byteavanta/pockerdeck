@@ -20,6 +20,9 @@ class RoomApp {
     this._timerLastEnd = null;
     this._randomizerEditing = false;
     this._randomizerSpinning = false;
+    // Creator config (estimation + backlog), set in modal before joining
+    this._configCards = null;
+    this._configBacklog = null;
   }
 
   init() {
@@ -67,6 +70,10 @@ class RoomApp {
 
     this.renderCards();
 
+    if (this.isCreator) {
+      this._initCreatorConfig();
+    }
+
     var saved = sessionStorage.getItem('name_' + this.roomId);
     if (saved) {
       this.userName = saved;
@@ -84,6 +91,128 @@ class RoomApp {
     window.addEventListener('beforeunload', function () {
       self.shouldReconnect = false;
       if (self.ws) self.ws.close();
+    });
+  }
+
+  // ── Creator room configuration (modal) ─────────────────────────────────────
+
+  _initCreatorConfig() {
+    var self = this;
+    var PRESETS = {
+      fibonacci: ['1', '2', '3', '5', '8', '13', '21', '34', '55', '?'],
+      tshirt:    ['XS', 'S', 'M', 'L', 'XL', 'XXL', '?'],
+      hours:     ['3', '6', '9', '12', '15', '18', '21', '24', '27', '30', '30+', '?'],
+    };
+    this._configCards = PRESETS.fibonacci.slice();
+    this._configBacklog = [];
+
+    this._renderCardChips();
+
+    var cardInput = document.getElementById('card-input');
+    var bliInput  = document.getElementById('bli-input');
+    if (cardInput) {
+      cardInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); self._addConfigCard(); }
+      });
+    }
+    if (bliInput) {
+      bliInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); self._addConfigBli(); }
+      });
+    }
+
+    // Expose globals the onclick handlers in template need
+    window.pickEstType = function (btn) {
+      document.querySelectorAll('.est-type-btn').forEach(function (b) { b.classList.remove('selected'); });
+      btn.classList.add('selected');
+      var type = btn.dataset.type;
+      if (type !== 'custom') {
+        self._configCards = PRESETS[type].slice();
+        self._renderCardChips();
+      }
+    };
+    window.addCard = function () { self._addConfigCard(); };
+    window.addBli  = function () { self._addConfigBli();  };
+  }
+
+  _addConfigCard() {
+    var input = document.getElementById('card-input');
+    var val = input.value.trim();
+    if (!val || val.length > 8) return;
+    if (this._configCards.indexOf(val) !== -1) return;
+    this._configCards.push(val);
+    input.value = '';
+    this._renderCardChips();
+    input.focus();
+    document.querySelectorAll('.est-type-btn').forEach(function (b) {
+      b.classList.toggle('selected', b.dataset.type === 'custom');
+    });
+  }
+
+  _removeConfigCard(index) {
+    this._configCards.splice(index, 1);
+    this._renderCardChips();
+  }
+
+  _renderCardChips() {
+    var self = this;
+    var editor = document.getElementById('cards-editor');
+    if (!editor) return;
+    editor.innerHTML = '';
+    this._configCards.forEach(function (val, i) {
+      var chip = document.createElement('span');
+      chip.className = 'card-chip';
+      var text = document.createElement('span');
+      text.textContent = val;
+      var rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'card-chip-remove';
+      rm.textContent = '×';
+      rm.onclick = function () { self._removeConfigCard(i); };
+      chip.appendChild(text);
+      chip.appendChild(rm);
+      editor.appendChild(chip);
+    });
+  }
+
+  _addConfigBli() {
+    var input = document.getElementById('bli-input');
+    var val = input.value.trim();
+    if (!val) return;
+    this._configBacklog.push(val);
+    input.value = '';
+    this._renderBliList();
+    input.focus();
+  }
+
+  _removeConfigBli(index) {
+    this._configBacklog.splice(index, 1);
+    this._renderBliList();
+  }
+
+  _renderBliList() {
+    var self = this;
+    var list = document.getElementById('bli-list');
+    if (!list) return;
+    list.innerHTML = '';
+    this._configBacklog.forEach(function (item, i) {
+      var li = document.createElement('li');
+      li.className = 'bli-item';
+      var num = document.createElement('span');
+      num.className = 'bli-num';
+      num.textContent = (i + 1) + '.';
+      var text = document.createElement('span');
+      text.className = 'bli-title';
+      text.textContent = item;
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'bli-remove';
+      del.textContent = '✕';
+      del.onclick = function () { self._removeConfigBli(i); };
+      li.appendChild(num);
+      li.appendChild(text);
+      li.appendChild(del);
+      list.appendChild(li);
     });
   }
 
@@ -132,6 +261,35 @@ class RoomApp {
 
     this.ws.onopen = function () {
       self.setStatus('connected', 'Connected');
+      // Creator sends room config on first join (not on reconnect)
+      if (self.isCreator && self._configCards && !self._configSent) {
+        self._configSent = true;
+        var cards   = self._configCards.length ? self._configCards : null;
+        var backlog = self._configBacklog && self._configBacklog.length ? self._configBacklog : null;
+        if (cards || backlog) {
+          self.send({
+            action:  'configure',
+            cards:   cards   ? JSON.stringify(cards)   : '',
+            backlog: backlog ? JSON.stringify(backlog) : '',
+          });
+          // Update local card grid if cards changed
+          if (cards) {
+            self.cards = cards;
+            var grid = document.getElementById('cards-grid');
+            if (grid) {
+              grid.innerHTML = '';
+              cards.forEach(function (value) {
+                var btn = document.createElement('button');
+                btn.className = 'vote-card';
+                btn.dataset.value = value;
+                btn.textContent = value;
+                btn.addEventListener('click', function () { self.vote(value); });
+                grid.appendChild(btn);
+              });
+            }
+          }
+        }
+      }
     };
 
     this.ws.onmessage = function (event) {

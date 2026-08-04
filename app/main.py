@@ -166,6 +166,12 @@ async def websocket_endpoint(
             elif action == "randomizer_pick" and is_admin:
                 changed = room.randomizer_pick()
 
+            elif action == "configure" and is_admin:
+                changed = room.configure(
+                    cards_raw=str(data.get("cards", "")),
+                    backlog_raw=str(data.get("backlog", "")),
+                )
+
             if changed:
                 await conn_manager.broadcast(room_id, room.build_state())
 

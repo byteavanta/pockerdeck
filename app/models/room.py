@@ -278,6 +278,39 @@ class Room:
         logger.debug("Room %s: randomizer picked '%s'", self.id, pick)
         return True
 
+    def configure(self, cards_raw: str, backlog_raw: str) -> bool:
+        card_list = None
+        if cards_raw:
+            try:
+                raw_cards = json.loads(cards_raw)
+                parsed = [
+                    str(c).strip()[:8]
+                    for c in raw_cards
+                    if str(c).strip()
+                ][:30]
+                if parsed:
+                    card_list = parsed
+            except Exception:
+                pass
+        if card_list:
+            self.cards = card_list
+
+        if backlog_raw:
+            try:
+                raw = json.loads(backlog_raw)
+                items = [
+                    BacklogItem(title=str(t).strip()[:200])
+                    for t in raw
+                    if str(t).strip()
+                ][:50]
+                if items:
+                    self.backlog = items
+            except Exception:
+                pass
+
+        logger.debug("Room %s: configured cards=%d backlog=%d", self.id, len(self.cards), len(self.backlog))
+        return True
+
     def build_state(self) -> dict:
         users: Dict[str, dict] = {}
         for name, p in self.participants.items():
