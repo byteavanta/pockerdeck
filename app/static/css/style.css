@@ -1036,6 +1036,12 @@ body {
   display: flex;
   gap: 0.2rem;
   margin-top: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.participant-card:hover .p-actions,
+.participant-card:focus-within .p-actions {
+  opacity: 1;
 }
 
 .btn-icon {
@@ -1349,6 +1355,7 @@ body {
   font-size: 0.9rem;
   color: #374151;
   transition: border-color 0.2s, background 0.2s;
+  position: relative;
 }
 .backlog-item.active {
   border-color: #4f46e5;
@@ -1403,9 +1410,61 @@ body {
 
 .bli-actions {
   display: inline-flex;
-  gap: 0.25rem;
+  align-items: center;
   margin-left: 0.25rem;
   flex-shrink: 0;
+  position: relative;
+}
+
+.bli-kebab-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #a0aec0;
+  padding: 0 0.3rem;
+  line-height: 1;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.bli-kebab-btn:hover {
+  color: #4f46e5;
+  background: #eef2ff;
+}
+
+.bli-kebab-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: #fff;
+  border: 2px solid #c7d2fe;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 120px;
+  z-index: 50;
+  overflow: hidden;
+  animation: randomizer-menu-in 0.15s ease both;
+}
+.bli-kebab-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+.bli-kebab-item:hover {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+.bli-kebab-item-danger:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
 /* Inline edit */
@@ -2041,4 +2100,17 @@ body {
 [data-theme="dark"] .randomizer-kebab-btn:hover {
   color: #a5b4fc;
   background: #1e1b4b;
+}
+
+/* BLI kebab dark mode */
+[data-theme="dark"] .bli-kebab-btn { color: #4b5563; }
+[data-theme="dark"] .bli-kebab-btn:hover { color: #a5b4fc; background: #1e1b4b; }
+[data-theme="dark"] .bli-kebab-menu { background: #1a1a1a; border-color: #3730a3; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+[data-theme="dark"] .bli-kebab-item { color: #e2e8f0; }
+[data-theme="dark"] .bli-kebab-item:hover { background: #1e1b4b; color: #a5b4fc; }
+[data-theme="dark"] .bli-kebab-item-danger:hover { background: #450a0a; color: #f87171; }
+
+/* ── Touch: always show admin controls (no hover available) ── */
+@media (hover: none) {
+  .p-actions { opacity: 1; }
 }

@@ -61,6 +61,10 @@ class RoomApp {
         self.renamingUser = null;
         self._renderParticipantsDOM(self.lastState);
       }
+      // Close BLI kebab menus on outside click
+      document.querySelectorAll('.bli-kebab-menu:not(.hidden)').forEach(function (m) {
+        if (!e.target.closest('.bli-actions')) m.classList.add('hidden');
+      });
       // Close randomizer settings menu on outside click
       var menu = document.getElementById('randomizer-settings-menu');
       if (menu && !e.target.closest('#randomizer-settings-wrap')) {
@@ -1016,20 +1020,43 @@ class RoomApp {
         var actions = document.createElement('span');
         actions.className = 'bli-actions';
 
-        var editBtn = document.createElement('button');
-        editBtn.className = 'btn-icon';
-        editBtn.title = 'Edit';
-        editBtn.textContent = '✏️';
-        (function (i) { editBtn.onclick = function () { self.startEditBli(i); }; }(idx));
+        var kebab = document.createElement('button');
+        kebab.className = 'bli-kebab-btn';
+        kebab.title = 'More actions';
+        kebab.textContent = '⋮';
 
-        var delBtn = document.createElement('button');
-        delBtn.className = 'btn-icon btn-icon-danger';
-        delBtn.title = 'Delete';
-        delBtn.textContent = '🗑';
-        (function (i) { delBtn.onclick = function () { self.confirmDeleteBli(i); }; }(idx));
+        var dropdown = document.createElement('div');
+        dropdown.className = 'bli-kebab-menu hidden';
 
-        actions.appendChild(editBtn);
-        actions.appendChild(delBtn);
+        var editItem = document.createElement('button');
+        editItem.className = 'bli-kebab-item';
+        editItem.textContent = '✏️ Edit';
+
+        var delItem = document.createElement('button');
+        delItem.className = 'bli-kebab-item bli-kebab-item-danger';
+        delItem.textContent = '🗑 Delete';
+
+        (function (i) {
+          kebab.addEventListener('click', function (e) {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+          });
+          editItem.addEventListener('click', function (e) {
+            e.stopPropagation();
+            dropdown.classList.add('hidden');
+            self.startEditBli(i);
+          });
+          delItem.addEventListener('click', function (e) {
+            e.stopPropagation();
+            dropdown.classList.add('hidden');
+            self.confirmDeleteBli(i);
+          });
+        }(idx));
+
+        dropdown.appendChild(editItem);
+        dropdown.appendChild(delItem);
+        actions.appendChild(kebab);
+        actions.appendChild(dropdown);
         li.appendChild(actions);
       }
 
