@@ -783,3 +783,228 @@ class TestRoomTimer:
         state = room.build_state()
         assert state["timer_active"] is False
         assert state["timer_end"] is None
+
+
+# ── Randomizer ────────────────────────────────────────────────────────────────
+
+class TestRandomizer:
+    def _make_room(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        return room
+
+    def test_set_randomizer_names_stores_and_resets(self):
+        room = self._make_room()
+        result = room.set_randomizer_names(["Alice", "Bob", "Carol"])
+        assert result is True
+        assert room.randomizer_names == ["Alice", "Bob", "Carol"]
+        assert room.randomizer_remaining == ["Alice", "Bob", "Carol"]
+        assert room.randomizer_last_pick is None
+
+    def test_set_randomizer_names_clears_previous_state(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        room.randomizer_pick()
+        room.set_randomizer_names(["Dave", "Eve"])
+        assert room.randomizer_last_pick is None
+        assert room.randomizer_remaining == ["Dave", "Eve"]
+
+    def test_set_randomizer_names_strips_and_truncates(self):
+        room = self._make_room()
+        room.set_randomizer_names(["  Alice  ", "B" * 60])
+        assert room.randomizer_names[0] == "Alice"
+        assert len(room.randomizer_names[1]) == 50
+
+    def test_set_randomizer_names_max_20(self):
+        room = self._make_room()
+        room.set_randomizer_names([str(i) for i in range(30)])
+        assert len(room.randomizer_names) == 20
+
+    def test_set_randomizer_names_empty_list_returns_false_when_already_empty(self):
+        room = Room.create("rand-room")  # no participants → randomizer starts empty
+        result = room.set_randomizer_names([])
+        assert result is False
+        assert room.randomizer_names == []
+
+    def test_set_randomizer_names_empty_clears_existing(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice"])
+        result = room.set_randomizer_names([])
+        assert result is True
+        assert room.randomizer_names == []
+
+    def test_randomizer_pick_removes_from_remaining(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        assert room.randomizer_pick() is True
+        assert room.randomizer_last_pick in ("Alice", "Bob")
+        assert len(room.randomizer_remaining) == 1
+        assert room.randomizer_last_pick not in room.randomizer_remaining
+
+    def test_randomizer_pick_exhausts_pool_then_stops(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob", "Carol"])
+        picked = []
+        for _ in range(3):
+            room.randomizer_pick()
+            picked.append(room.randomizer_last_pick)
+        # All three should have been picked
+        assert sorted(picked) == ["Alice", "Bob", "Carol"]
+        assert room.randomizer_remaining == []
+        # Next pick should fail — pool exhausted, no auto-reset
+        result = room.randomizer_pick()
+        assert result is False
+
+    def test_randomizer_pick_no_names_returns_false(self):
+        room = Room.create("rand-room")  # no participants → pool is empty
+        assert room.randomizer_pick() is False
+        assert room.randomizer_last_pick is None
+
+    def test_reset_restores_randomizer_pool(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        room.randomizer_pick()
+        assert len(room.randomizer_remaining) == 1
+        room.reset("Alice")
+        assert room.randomizer_remaining == ["Alice", "Bob"]
+        assert room.randomizer_last_pick is None
+
+    def test_build_state_includes_randomizer_fields(self):
+        room = self._make_room()
+        room.set_randomizer_names(["Alice", "Bob"])
+        room.randomizer_pick()
+        state = room.build_state()
+        assert "randomizer_names" in state
+        assert "randomizer_remaining" in state
+        assert "randomizer_last_pick" in state
+        assert state["randomizer_last_pick"] in ("Alice", "Bob")
+        assert len(state["randomizer_remaining"]) == 1
+
+    def test_build_state_randomizer_defaults(self):
+        room = Room.create("rand-room")  # no participants → all randomizer fields empty
+        state = room.build_state()
+        assert state["randomizer_names"] == []
+        assert state["randomizer_remaining"] == []
+        assert state["randomizer_last_pick"] is None
+        assert state["randomizer_excluded"] == []
+
+    # ── Auto-sync on participant join/leave ───────────────────────────────────
+
+    def test_add_participant_auto_adds_to_randomizer(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        assert "Alice" in room.randomizer_names
+        assert "Alice" in room.randomizer_remaining
+
+    def test_add_participant_second_user_also_added(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        assert room.randomizer_names == ["Alice", "Bob"]
+        assert room.randomizer_remaining == ["Alice", "Bob"]
+
+    def test_add_participant_viewer_not_added(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Viewer1", "viewer")
+        assert "Viewer1" not in room.randomizer_names
+        assert "Viewer1" not in room.randomizer_remaining
+
+    def test_add_participant_excluded_name_not_added(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.randomizer_exclude("Alice")
+        # Alice leaves and rejoins
+        room.remove_participant("Alice")
+        room.add_participant("Alice", "user")
+        assert "Alice" not in room.randomizer_names
+        assert "Alice" in room.randomizer_excluded
+
+    def test_remove_participant_auto_removes_from_randomizer(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        room.remove_participant("Alice")
+        assert "Alice" not in room.randomizer_names
+        assert "Alice" not in room.randomizer_remaining
+        assert "Bob" in room.randomizer_names
+
+    def test_remove_participant_removes_from_remaining_after_pick(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        # Pick until Alice is in remaining
+        while room.randomizer_remaining != ["Alice"]:
+            room.randomizer_remaining = ["Alice", "Bob"]
+            room.randomizer_last_pick = None
+            room.randomizer_pick()
+            if room.randomizer_last_pick == "Bob":
+                break
+        # Now just verify remove cleans up regardless
+        room.remove_participant("Alice")
+        assert "Alice" not in room.randomizer_remaining
+
+    # ── Exclude / include ─────────────────────────────────────────────────────
+
+    def test_randomizer_exclude_removes_from_pool(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        result = room.randomizer_exclude("Alice")
+        assert result is True
+        assert "Alice" not in room.randomizer_names
+        assert "Alice" not in room.randomizer_remaining
+        assert "Alice" in room.randomizer_excluded
+
+    def test_randomizer_exclude_unknown_name_returns_false(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        result = room.randomizer_exclude("Nobody")
+        assert result is False
+
+    def test_randomizer_include_restores_name(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        room.randomizer_exclude("Alice")
+        result = room.randomizer_include("Alice")
+        assert result is True
+        assert "Alice" in room.randomizer_names
+        assert "Alice" in room.randomizer_remaining
+        assert "Alice" not in room.randomizer_excluded
+
+    def test_randomizer_include_non_excluded_returns_false(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        result = room.randomizer_include("Alice")
+        assert result is False
+
+    def test_reset_preserves_exclusions(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        room.randomizer_exclude("Alice")
+        room.randomizer_pick()
+        room.reset("Bob")
+        assert "Alice" not in room.randomizer_names
+        assert "Alice" in room.randomizer_excluded
+        assert room.randomizer_remaining == ["Bob"]
+
+    def test_set_randomizer_names_filters_excluded(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        room.randomizer_exclude("Alice")
+        room.set_randomizer_names(["Alice", "Bob", "Carol"])
+        assert "Alice" not in room.randomizer_names
+        assert "Bob" in room.randomizer_names
+        assert "Carol" in room.randomizer_names
+
+    def test_build_state_includes_excluded(self):
+        room = Room.create("rand-room")
+        room.add_participant("Alice", "user")
+        room.add_participant("Bob", "user")
+        room.randomizer_exclude("Alice")
+        state = room.build_state()
+        assert "randomizer_excluded" in state
+        assert state["randomizer_excluded"] == ["Alice"]

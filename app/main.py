@@ -158,6 +158,20 @@ async def websocket_endpoint(
             elif action == "stop_timer" and is_admin:
                 changed = room.stop_timer()
 
+            elif action == "set_randomizer_names" and is_admin:
+                names = data.get("names", [])
+                if isinstance(names, list):
+                    changed = room.set_randomizer_names(names)
+
+            elif action == "randomizer_pick" and is_admin:
+                changed = room.randomizer_pick()
+
+            elif action == "randomizer_exclude" and is_admin:
+                changed = room.randomizer_exclude(str(data.get("name", "")))
+
+            elif action == "randomizer_include" and is_admin:
+                changed = room.randomizer_include(str(data.get("name", "")))
+
             elif action == "configure" and is_admin:
                 changed = room.configure(
                     cards_raw=str(data.get("cards", "")),

@@ -18,6 +18,8 @@ class RoomApp {
     this._timerInterval = null;
     this._timerDuration = 60;
     this._timerLastEnd = null;
+    this._randomizerEditing = false;
+    this._randomizerSpinning = false;
     // Creator config (estimation + backlog), set in modal before joining
     this._configCards = null;
     this._configBacklog = null;
@@ -58,6 +60,11 @@ class RoomApp {
       if (self.renamingUser && !e.target.closest('.rename-popover') && !e.target.closest('.btn-icon')) {
         self.renamingUser = null;
         self._renderParticipantsDOM(self.lastState);
+      }
+      // Close randomizer settings menu on outside click
+      var menu = document.getElementById('randomizer-settings-menu');
+      if (menu && !e.target.closest('#randomizer-settings-wrap')) {
+        menu.classList.add('hidden');
       }
     });
 
@@ -374,6 +381,7 @@ class RoomApp {
     this.renderResults(state);
     this.renderDistribution(state);
     this.renderTimer(state);
+    this.renderRandomizer(state);
     this.syncStory(state);
   }
 
@@ -414,6 +422,11 @@ class RoomApp {
     if (prev.timer_active && !state.timer_active) {
       var wasExpired = prev.timer_end && (Date.now() / 1000) >= prev.timer_end;
       if (!wasExpired) this.showToast('⏱ Timer stopped', 'info');
+    }
+
+    // Randomizer pick — toast is delayed until after the spin animation
+    if (state.randomizer_last_pick && state.randomizer_last_pick !== prev.randomizer_last_pick) {
+      this._runSpinAnimation(state.randomizer_last_pick);
     }
   }
 
@@ -1220,4 +1233,227 @@ class RoomApp {
     this.confirmingDeleteBli = null;
     this.send({ action: 'delete_bli', index: index });
   }
+
+  // ── Randomizer ───────────────────────────────────────────────────────────────
+
+  // Returns names of non-viewer participants — used only for the "extras" edit form.
+  _participantNames(state) {
+    if (!state) return [];
+    return Object.entries(state.users)
+      .filter(function(e) { return e[1].role !== 'viewer'; })
+      .map(function(e) { return e[0]; });
+  }
+
+  renderRandomizer(state) {
+    if (!state) return;
+
+    var allNames  = state.randomizer_names || [];
+    var remaining = state.randomizer_remaining || [];
+    var excluded  = state.randomizer_excluded || [];
+    var lastPick  = state.randomizer_last_pick || null;
+    var isAdmin   = this.isAdmin;
+    var self      = this;
+
+    // Wheel: show whenever there are active names
+    var wheelWrap = document.getElementById('randomizer-wheel-wrap');
+    if (wheelWrap) {
+      if (allNames.length > 0) {
+        wheelWrap.classList.remove('hidden');
+        if (!this._randomizerSpinning) {
+          var nameEl = document.getElementById('randomizer-wheel-name');
+          if (nameEl && !nameEl.classList.contains('result-pop')) {
+            nameEl.textContent = lastPick || '?';
+          }
+        }
+      } else {
+        wheelWrap.classList.add('hidden');
+      }
+    }
+
+    // Name chips — skip during animation so the picked name isn't revealed early
+    var listEl = document.getElementById('randomizer-names-list');
+    if (listEl && !this._randomizerSpinning) {
+      listEl.innerHTML = '';
+
+      // Active chips (in pool or already used this round)
+      allNames.forEach(function(name) {
+        var used = remaining.indexOf(name) === -1;
+        var chip = document.createElement('span');
+        chip.className = 'randomizer-chip' + (used ? ' used' : '');
+
+        var label = document.createElement('span');
+        label.textContent = name;
+        chip.appendChild(label);
+
+        // Exclude button — only for admin on available (not-yet-used) chips
+        if (isAdmin && !used) {
+          var xBtn = document.createElement('button');
+          xBtn.type = 'button';
+          xBtn.className = 'randomizer-chip-action';
+          xBtn.title = 'Exclude from randomizer';
+          xBtn.textContent = '✕';
+          (function(n) {
+            xBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              self.send({ action: 'randomizer_exclude', name: n });
+            });
+          }(name));
+          chip.appendChild(xBtn);
+        }
+
+        listEl.appendChild(chip);
+      });
+
+      // Excluded chips — shown below active chips, admin-only re-add button
+      excluded.forEach(function(name) {
+        var chip = document.createElement('span');
+        chip.className = 'randomizer-chip excluded';
+
+        var label = document.createElement('span');
+        label.textContent = name;
+        chip.appendChild(label);
+
+        if (isAdmin) {
+          var addBtn = document.createElement('button');
+          addBtn.type = 'button';
+          addBtn.className = 'randomizer-chip-action';
+          addBtn.title = 'Re-add to randomizer';
+          addBtn.textContent = '+';
+          (function(n) {
+            addBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              self.send({ action: 'randomizer_include', name: n });
+            });
+          }(name));
+          chip.appendChild(addBtn);
+        }
+
+        listEl.appendChild(chip);
+      });
+    }
+
+    // Empty state — show when nothing active and nothing excluded and not editing
+    var emptyEl = document.getElementById('randomizer-empty');
+    if (emptyEl) {
+      emptyEl.classList.toggle('hidden', allNames.length > 0 || excluded.length > 0 || this._randomizerEditing);
+    }
+
+    // Edit form — admin only; shown when editing
+    var configEl = document.getElementById('randomizer-configure');
+    if (configEl) {
+      configEl.classList.toggle('hidden', !isAdmin || !this._randomizerEditing);
+    }
+
+    // Pick button — admin only, after reveal, while pool is non-empty
+    var pickBtn = document.getElementById('randomizer-pick-btn');
+    if (pickBtn) {
+      var canPick = allNames.length > 0 && remaining.length > 0 && isAdmin && !this._randomizerEditing && (state.revealed || false);
+      pickBtn.classList.toggle('hidden', !canPick);
+    }
+
+    // Settings kebab — admin only, not while editing
+    var settingsWrap = document.getElementById('randomizer-settings-wrap');
+    if (settingsWrap) {
+      settingsWrap.classList.toggle('hidden', !isAdmin || this._randomizerEditing);
+    }
+  }
+
+  // Called when a new randomizer_last_pick arrives from the server.
+  // Runs a ~1.5s spin animation then snaps to the result.
+  _runSpinAnimation(pickedName) {
+    var self        = this;
+    var ring        = document.getElementById('randomizer-ring-fill');
+    var ringEl      = document.querySelector('.randomizer-ring');
+    var nameEl      = document.getElementById('randomizer-wheel-name');
+    if (!ring || !ringEl || !nameEl) return;
+
+    this._randomizerSpinning = true;
+
+    // Phase 1 — spin for 1.4 s
+    ring.classList.remove('result-glow');
+    ringEl.classList.add('spinning');
+    nameEl.classList.add('spinning');
+    nameEl.classList.remove('result-pop');
+
+    // Rapid name flicker during spin
+    var names = this._participantNames(this.lastState);
+    var storedNames = (this.lastState && this.lastState.randomizer_names) || [];
+    var extras = storedNames.filter(function(n) { return names.indexOf(n) === -1; });
+    var allNames = names.concat(extras);
+    var flickerNames = allNames.length > 1 ? allNames : [pickedName];
+    var flickerIdx   = 0;
+    var flickerTimer = setInterval(function() {
+      nameEl.textContent = flickerNames[flickerIdx % flickerNames.length];
+      flickerIdx++;
+    }, 100);
+
+    setTimeout(function() {
+      // Phase 2 — reveal result
+      clearInterval(flickerTimer);
+      ringEl.classList.remove('spinning');
+      ring.classList.add('result-glow');
+      nameEl.classList.remove('spinning');
+      nameEl.textContent = pickedName;
+      nameEl.classList.add('result-pop');
+      self._randomizerSpinning = false;
+      self.showToast('🎲 Reviewer: ' + pickedName, 'success');
+
+      // Clean up pop class after animation completes, then reveal updated chips
+      setTimeout(function() {
+        nameEl.classList.remove('result-pop');
+        self.renderRandomizer(self.lastState);
+      }, 500);
+    }, 1400);
+  }
+
+  toggleRandomizerSettings(e) {
+    e.stopPropagation();
+    var menu = document.getElementById('randomizer-settings-menu');
+    if (menu) menu.classList.toggle('hidden');
+  }
+
+  openRandomizerEdit() {
+    this._randomizerEditing = true;
+    var input = document.getElementById('randomizer-input');
+    if (input && this.lastState) {
+      // Pre-fill with manually-added extras (names not currently active participants)
+      var participantNames = this._participantNames(this.lastState);
+      var extras = (this.lastState.randomizer_names || []).filter(function(n) {
+        return participantNames.indexOf(n) === -1;
+      });
+      input.value = extras.join('\n');
+    }
+    this.renderRandomizer(this.lastState);
+    setTimeout(function() {
+      var el = document.getElementById('randomizer-input');
+      if (el) { el.focus(); }
+    }, 0);
+  }
+
+  cancelRandomizerEdit() {
+    this._randomizerEditing = false;
+    this.renderRandomizer(this.lastState);
+  }
+
+  saveRandomizerNames() {
+    var input = document.getElementById('randomizer-input');
+    if (!input) return;
+    // Merge current participant names with manually entered extras
+    var participantNames = this._participantNames(this.lastState);
+    var extras = input.value.split('\n')
+      .map(function(n) { return n.trim(); })
+      .filter(function(n) { return n.length > 0; });
+    // Deduplicate: extras that are already a participant get dropped
+    var uniqueExtras = extras.filter(function(n) {
+      return participantNames.indexOf(n) === -1;
+    });
+    var allNames = participantNames.concat(uniqueExtras);
+    this._randomizerEditing = false;
+    this.send({ action: 'set_randomizer_names', names: allNames });
+  }
+
+  randomPickReviewer() {
+    this.send({ action: 'randomizer_pick' });
+  }
 }
+
