@@ -1815,12 +1815,15 @@ body {
 .randomizer-chip {
   font-size: 0.82rem;
   font-weight: 600;
-  padding: 0.3rem 0.7rem;
+  padding: 0.3rem 0.5rem 0.3rem 0.7rem;
   border-radius: 999px;
   background: #eef2ff;
   color: #4f46e5;
   border: 1.5px solid #c7d2fe;
   transition: opacity 0.2s, text-decoration 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .randomizer-chip.used {
@@ -1829,6 +1832,33 @@ body {
   background: #f1f5f9;
   color: #94a3b8;
   border-color: #e2e8f0;
+}
+
+.randomizer-chip.excluded {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+  opacity: 0.75;
+}
+
+/* Inline ✕ / + action button inside a chip */
+.randomizer-chip-action {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 0.1rem;
+  color: inherit;
+  opacity: 0.6;
+  border-radius: 999px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.randomizer-chip-action:hover {
+  opacity: 1;
+  background: rgba(0,0,0,0.08);
 }
 
 /* Edit form */
@@ -1902,6 +1932,12 @@ body {
   background: #1a1a1a;
   color: #4b5563;
   border-color: #374151;
+}
+
+[data-theme="dark"] .randomizer-chip.excluded {
+  background: #2d1515;
+  color: #f87171;
+  border-color: #7f1d1d;
 }
 
 [data-theme="dark"] .randomizer-textarea {

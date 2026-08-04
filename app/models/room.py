@@ -28,6 +28,7 @@ class Room:
     randomizer_names: List[str] = field(default_factory=list)
     randomizer_remaining: List[str] = field(default_factory=list)
     randomizer_last_pick: Optional[str] = None
+    randomizer_excluded: List[str] = field(default_factory=list)
 
     @classmethod
     def create(cls, room_id: str, backlog_raw: str = "", cards_raw: str = "") -> "Room":
@@ -67,11 +68,18 @@ class Room:
                 role = "admin"
         p = Participant(name=name, role=role)
         self.participants[name] = p
+        if role != "viewer" and name not in self.randomizer_excluded and name not in self.randomizer_names:
+            self.randomizer_names.append(name)
+            self.randomizer_remaining.append(name)
         logger.debug("Room %s: added participant '%s' role=%s", self.id, name, role)
         return p
 
     def remove_participant(self, name: str) -> None:
         self.participants.pop(name, None)
+        if name in self.randomizer_names:
+            self.randomizer_names.remove(name)
+        if name in self.randomizer_remaining:
+            self.randomizer_remaining.remove(name)
         logger.debug("Room %s: removed participant '%s'", self.id, name)
         if self.admin == name:
             self.promote_next_admin()
@@ -262,11 +270,36 @@ class Room:
 
     def set_randomizer_names(self, names: List[str]) -> bool:
         names = [str(n).strip()[:50] for n in names if str(n).strip()][:20]
+        names = [n for n in names if n not in self.randomizer_excluded]
         if not names and not self.randomizer_names:
             return False
         self.randomizer_names = names
         self.randomizer_remaining = list(names)
         self.randomizer_last_pick = None
+        return True
+
+    def randomizer_exclude(self, name: str) -> bool:
+        is_active = name in self.randomizer_names
+        is_participant = name in self.participants and self.participants[name].role != "viewer"
+        if not is_active and not is_participant:
+            return False
+        if name not in self.randomizer_excluded:
+            self.randomizer_excluded.append(name)
+        if name in self.randomizer_names:
+            self.randomizer_names.remove(name)
+        if name in self.randomizer_remaining:
+            self.randomizer_remaining.remove(name)
+        logger.debug("Room %s: randomizer excluded '%s'", self.id, name)
+        return True
+
+    def randomizer_include(self, name: str) -> bool:
+        if name not in self.randomizer_excluded:
+            return False
+        self.randomizer_excluded.remove(name)
+        if name not in self.randomizer_names:
+            self.randomizer_names.append(name)
+            self.randomizer_remaining.append(name)
+        logger.debug("Room %s: randomizer included '%s'", self.id, name)
         return True
 
     def randomizer_pick(self) -> bool:
@@ -328,4 +361,5 @@ class Room:
             "randomizer_names": self.randomizer_names,
             "randomizer_remaining": self.randomizer_remaining,
             "randomizer_last_pick": self.randomizer_last_pick,
+            "randomizer_excluded": self.randomizer_excluded,
         }

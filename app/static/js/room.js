@@ -1236,7 +1236,7 @@ class RoomApp {
 
   // ── Randomizer ───────────────────────────────────────────────────────────────
 
-  // Returns names of non-viewer participants (excluding self when viewer, but include all non-viewers).
+  // Returns names of non-viewer participants — used only for the "extras" edit form.
   _participantNames(state) {
     if (!state) return [];
     return Object.entries(state.users)
@@ -1247,27 +1247,18 @@ class RoomApp {
   renderRandomizer(state) {
     if (!state) return;
 
-    // Merge participant names with any manually added extras.
-    // Participants always come first; extras that don't overlap are appended.
-    var participantNames = this._participantNames(state);
-    var storedNames      = state.randomizer_names || [];
-    // "Extra" names are those in storedNames that aren't current participants
-    var extras = storedNames.filter(function(n) {
-      return participantNames.indexOf(n) === -1;
-    });
-    var allNames  = participantNames.concat(extras);
+    var allNames  = state.randomizer_names || [];
     var remaining = state.randomizer_remaining || [];
+    var excluded  = state.randomizer_excluded || [];
     var lastPick  = state.randomizer_last_pick || null;
     var isAdmin   = this.isAdmin;
-    var isViewer  = (this.userRole === 'viewer');
     var self      = this;
 
-    // Wheel: show whenever there are names
+    // Wheel: show whenever there are active names
     var wheelWrap = document.getElementById('randomizer-wheel-wrap');
     if (wheelWrap) {
       if (allNames.length > 0) {
         wheelWrap.classList.remove('hidden');
-        // If not spinning and not in the middle of an animation, update the centre name
         if (!this._randomizerSpinning) {
           var nameEl = document.getElementById('randomizer-wheel-name');
           if (nameEl && !nameEl.classList.contains('result-pop')) {
@@ -1283,20 +1274,68 @@ class RoomApp {
     var listEl = document.getElementById('randomizer-names-list');
     if (listEl && !this._randomizerSpinning) {
       listEl.innerHTML = '';
-      var effectiveRemainingForChips = (storedNames.length === 0 && allNames.length > 0) ? allNames : remaining;
+
+      // Active chips (in pool or already used this round)
       allNames.forEach(function(name) {
+        var used = remaining.indexOf(name) === -1;
         var chip = document.createElement('span');
-        var used = effectiveRemainingForChips.indexOf(name) === -1;
         chip.className = 'randomizer-chip' + (used ? ' used' : '');
-        chip.textContent = name;
+
+        var label = document.createElement('span');
+        label.textContent = name;
+        chip.appendChild(label);
+
+        // Exclude button — only for admin on available (not-yet-used) chips
+        if (isAdmin && !used) {
+          var xBtn = document.createElement('button');
+          xBtn.type = 'button';
+          xBtn.className = 'randomizer-chip-action';
+          xBtn.title = 'Exclude from randomizer';
+          xBtn.textContent = '✕';
+          (function(n) {
+            xBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              self.send({ action: 'randomizer_exclude', name: n });
+            });
+          }(name));
+          chip.appendChild(xBtn);
+        }
+
+        listEl.appendChild(chip);
+      });
+
+      // Excluded chips — shown below active chips, admin-only re-add button
+      excluded.forEach(function(name) {
+        var chip = document.createElement('span');
+        chip.className = 'randomizer-chip excluded';
+
+        var label = document.createElement('span');
+        label.textContent = name;
+        chip.appendChild(label);
+
+        if (isAdmin) {
+          var addBtn = document.createElement('button');
+          addBtn.type = 'button';
+          addBtn.className = 'randomizer-chip-action';
+          addBtn.title = 'Re-add to randomizer';
+          addBtn.textContent = '+';
+          (function(n) {
+            addBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              self.send({ action: 'randomizer_include', name: n });
+            });
+          }(name));
+          chip.appendChild(addBtn);
+        }
+
         listEl.appendChild(chip);
       });
     }
 
-    // Empty state
+    // Empty state — show when nothing active and nothing excluded and not editing
     var emptyEl = document.getElementById('randomizer-empty');
     if (emptyEl) {
-      emptyEl.classList.toggle('hidden', allNames.length > 0 || this._randomizerEditing);
+      emptyEl.classList.toggle('hidden', allNames.length > 0 || excluded.length > 0 || this._randomizerEditing);
     }
 
     // Edit form — admin only; shown when editing
@@ -1305,16 +1344,14 @@ class RoomApp {
       configEl.classList.toggle('hidden', !isAdmin || !this._randomizerEditing);
     }
 
-    // Pick button — non-viewers, only when votes are revealed and pool has names left.
-    // If names have never been synced to the server yet, treat the pool as full.
+    // Pick button — admin only, after reveal, while pool is non-empty
     var pickBtn = document.getElementById('randomizer-pick-btn');
     if (pickBtn) {
-      var effectiveRemaining = (storedNames.length === 0 && allNames.length > 0) ? allNames : remaining;
-      var canPick = allNames.length > 0 && effectiveRemaining.length > 0 && isAdmin && !this._randomizerEditing && (state.revealed || false);
+      var canPick = allNames.length > 0 && remaining.length > 0 && isAdmin && !this._randomizerEditing && (state.revealed || false);
       pickBtn.classList.toggle('hidden', !canPick);
     }
 
-    // Settings gear — admin only, not while editing
+    // Settings kebab — admin only, not while editing
     var settingsWrap = document.getElementById('randomizer-settings-wrap');
     if (settingsWrap) {
       settingsWrap.classList.toggle('hidden', !isAdmin || this._randomizerEditing);
@@ -1379,7 +1416,7 @@ class RoomApp {
     this._randomizerEditing = true;
     var input = document.getElementById('randomizer-input');
     if (input && this.lastState) {
-      // Pre-fill with the stored extras (not participant names, which are auto-added)
+      // Pre-fill with manually-added extras (names not currently active participants)
       var participantNames = this._participantNames(this.lastState);
       var extras = (this.lastState.randomizer_names || []).filter(function(n) {
         return participantNames.indexOf(n) === -1;
@@ -1416,19 +1453,6 @@ class RoomApp {
   }
 
   randomPickReviewer() {
-    // Sync the current name list (participants + extras) to the server before picking,
-    // so the server always has the latest participant set.
-    var participantNames = this._participantNames(this.lastState);
-    var storedNames = (this.lastState && this.lastState.randomizer_names) || [];
-    var extras = storedNames.filter(function(n) { return participantNames.indexOf(n) === -1; });
-    var allNames = participantNames.concat(extras);
-    // Only update if the list has changed
-    var stored = JSON.stringify(storedNames);
-    var current = JSON.stringify(allNames);
-    var self = this;
-    if (stored !== current) {
-      this.send({ action: 'set_randomizer_names', names: allNames });
-    }
     this.send({ action: 'randomizer_pick' });
   }
 }
