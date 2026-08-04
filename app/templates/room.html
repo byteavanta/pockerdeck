@@ -59,7 +59,57 @@
           </div>
           <ul id="bli-list" class="bli-list"></ul>
         </div>
+
+        <div class="modal-config-section modal-config-section--collapsible">
+          <button type="button" class="settings-collapse-btn" onclick="toggleCreatorSettings(this)" aria-expanded="false">
+            Room Settings
+            <span class="settings-collapse-chevron">›</span>
+          </button>
+          <div class="room-settings-list hidden" id="creator-settings-body">
+            <label class="setting-row">
+              <span class="setting-label">Enable Backlog</span>
+              <span class="toggle-wrap"><input type="checkbox" id="setting-backlog" class="toggle-input" checked /><span class="toggle-track"></span></span>
+            </label>
+            <label class="setting-row">
+              <span class="setting-label">Enable Randomizer</span>
+              <span class="toggle-wrap"><input type="checkbox" id="setting-randomizer" class="toggle-input" checked /><span class="toggle-track"></span></span>
+            </label>
+            <label class="setting-row">
+              <span class="setting-label">Participants only (no viewers)</span>
+              <span class="toggle-wrap"><input type="checkbox" id="setting-no-viewers" class="toggle-input" /><span class="toggle-track"></span></span>
+            </label>
+            <label class="setting-row">
+              <span class="setting-label">Only admin can share link</span>
+              <span class="toggle-wrap"><input type="checkbox" id="setting-admin-share" class="toggle-input" /><span class="toggle-track"></span></span>
+            </label>
+            <label class="setting-row">
+              <span class="setting-label">Only admin can reveal votes</span>
+              <span class="toggle-wrap"><input type="checkbox" id="setting-admin-reveal" class="toggle-input" /><span class="toggle-track"></span></span>
+            </label>
+            <label class="setting-row">
+              <span class="setting-label">Auto-reveal when all voted</span>
+              <span class="toggle-wrap"><input type="checkbox" id="setting-auto-reveal" class="toggle-input" /><span class="toggle-track"></span></span>
+            </label>
+            <label class="setting-row">
+              <span class="setting-label">Password protect</span>
+              <span class="toggle-wrap"><input type="checkbox" id="setting-password-toggle" class="toggle-input" onchange="togglePasswordField(this)" /><span class="toggle-track"></span></span>
+            </label>
+            <div id="password-field-wrap" class="password-field-wrap hidden">
+              <input type="password" id="setting-password" placeholder="Room password…" maxlength="64" autocomplete="new-password" />
+            </div>
+          </div>
+        </div>
       </div>
+      {% endif %}
+
+      {% if password_required %}
+      <input
+        type="password"
+        id="room-password-input"
+        placeholder="Room password"
+        maxlength="64"
+        autocomplete="off"
+      />
       {% endif %}
 
       <input
@@ -99,6 +149,7 @@
       </div>
       <div class="header-right">
         <span id="conn-status" class="status-badge disconnected">Connecting…</span>
+        <button id="settings-btn" onclick="app.openSettingsPanel()" class="btn btn-secondary hidden" title="Room settings">Settings</button>
         <button id="copy-btn" onclick="app.copyLink()" class="btn btn-secondary">📋 Copy Link</button>
       </div>
     </div>
@@ -244,6 +295,51 @@
 
   </div><!-- /#app -->
 
+  <!-- ── Room Settings panel (admin only) ── -->
+  <div id="settings-overlay" class="modal-overlay hidden">
+    <div class="modal settings-modal">
+      <h2>Room Settings</h2>
+      <p>Changes apply instantly to all participants.</p>
+      <div class="room-settings-list">
+        <label class="setting-row">
+          <span class="setting-label">Enable Backlog</span>
+          <span class="toggle-wrap"><input type="checkbox" id="sp-backlog" class="toggle-input" /><span class="toggle-track"></span></span>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Enable Randomizer</span>
+          <span class="toggle-wrap"><input type="checkbox" id="sp-randomizer" class="toggle-input" /><span class="toggle-track"></span></span>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Participants only (no viewers)</span>
+          <span class="toggle-wrap"><input type="checkbox" id="sp-no-viewers" class="toggle-input" /><span class="toggle-track"></span></span>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Only admin can share link</span>
+          <span class="toggle-wrap"><input type="checkbox" id="sp-admin-share" class="toggle-input" /><span class="toggle-track"></span></span>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Only admin can reveal votes</span>
+          <span class="toggle-wrap"><input type="checkbox" id="sp-admin-reveal" class="toggle-input" /><span class="toggle-track"></span></span>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Auto-reveal when all voted</span>
+          <span class="toggle-wrap"><input type="checkbox" id="sp-auto-reveal" class="toggle-input" /><span class="toggle-track"></span></span>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Password protect</span>
+          <span class="toggle-wrap"><input type="checkbox" id="sp-password-toggle" class="toggle-input" onchange="app.toggleSettingsPwField(this)" /><span class="toggle-track"></span></span>
+        </label>
+        <div id="sp-password-field-wrap" class="password-field-wrap hidden">
+          <input type="password" id="sp-password" placeholder="Room password…" maxlength="64" autocomplete="new-password" />
+        </div>
+      </div>
+      <div class="modal-btn-row">
+        <button onclick="app.saveSettings()" class="btn btn-primary btn-full">Save Settings</button>
+        <button onclick="app.closeSettingsPanel()" class="btn btn-secondary btn-full">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="app-footer"><a href="{{ docs_url }}" target="_blank" rel="noopener noreferrer" class="footer-docs-link" aria-label="Help &amp; Docs (opens in a new tab)" title="Help &amp; Docs (opens in a new tab)">Help &amp; Docs 📖</a> · v{{ version }}</footer>
 
   <script>
@@ -251,6 +347,8 @@
     const IS_CREATOR = {{ 'true' if is_creator else 'false' }};
     const IS_SPECTATOR = {{ 'true' if is_spectator else 'false' }};
     const CARDS = {{ cards | tojson }};
+    const PASSWORD_REQUIRED = {{ 'true' if password_required else 'false' }};
+    const NO_VIEWERS = {{ 'true' if no_viewers else 'false' }};
 
     function toggleTheme() {
       var html = document.documentElement;
@@ -264,6 +362,19 @@
       }
       syncThemeIcon();
     }
+    function toggleCreatorSettings(btn) {
+      var body = document.getElementById('creator-settings-body');
+      var open = !body.classList.contains('hidden');
+      body.classList.toggle('hidden', open);
+      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      btn.classList.toggle('open', !open);
+    }
+    function togglePasswordField(cb) {
+      var wrap = document.getElementById('password-field-wrap');
+      if (!wrap) return;
+      wrap.classList.toggle('hidden', !cb.checked);
+      if (cb.checked) document.getElementById('setting-password').focus();
+    }
     function syncThemeIcon() {
       var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       var btn = document.querySelector('.theme-toggle');
@@ -276,7 +387,7 @@
   </script>
   <script src="/static/js/room.js?v={{ js_hash }}"></script>
   <script>
-    var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS, IS_SPECTATOR);
+    var app = new RoomApp(ROOM_ID, IS_CREATOR, CARDS, IS_SPECTATOR, PASSWORD_REQUIRED, NO_VIEWERS);
     app.init();
   </script>
 </body>
