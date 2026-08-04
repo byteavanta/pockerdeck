@@ -196,6 +196,14 @@ class Room:
             self.story = title
         return True
 
+    def set_vote_result(self, index: int, value: str) -> bool:
+        value = str(value).strip()[:20]
+        if not value or not isinstance(index, int) or not (0 <= index < len(self.backlog)):
+            return False
+        self.backlog[index].vote_result = value
+        logger.debug("Room %s: vote result set on item %d to '%s'", self.id, index, value)
+        return True
+
     def delete_backlog_item(self, index: int) -> bool:
         if not isinstance(index, int) or not (0 <= index < len(self.backlog)):
             return False

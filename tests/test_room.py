@@ -492,6 +492,45 @@ class TestRoomBacklog:
         assert room.select_backlog_item(0) is False
 
 
+class TestRoomSetVoteResult:
+    def _make_room_with_bli(self):
+        room = Room.create("r1")
+        room.add_participant("Alice", "user")  # becomes admin
+        room.add_backlog_item("Feature A")
+        return room
+
+    def test_set_vote_result_valid(self):
+        room = self._make_room_with_bli()
+        assert room.set_vote_result(0, "13") is True
+        assert room.backlog[0].vote_result == "13"
+
+    def test_set_vote_result_empty_returns_false(self):
+        room = self._make_room_with_bli()
+        assert room.set_vote_result(0, "") is False
+        assert room.backlog[0].vote_result is None
+
+    def test_set_vote_result_whitespace_only_returns_false(self):
+        room = self._make_room_with_bli()
+        assert room.set_vote_result(0, "   ") is False
+        assert room.backlog[0].vote_result is None
+
+    def test_set_vote_result_out_of_bounds_returns_false(self):
+        room = self._make_room_with_bli()
+        assert room.set_vote_result(99, "5") is False
+
+    def test_set_vote_result_non_int_index_returns_false(self):
+        room = self._make_room_with_bli()
+        assert room.set_vote_result("0", "5") is False
+        assert room.backlog[0].vote_result is None
+
+    def test_set_vote_result_truncates_to_20_chars(self):
+        room = self._make_room_with_bli()
+        value_30_chars = "A" * 30
+        assert room.set_vote_result(0, value_30_chars) is True
+        assert room.backlog[0].vote_result == "A" * 20
+        assert len(room.backlog[0].vote_result) == 20
+
+
 class TestRoomRename:
     def test_rename_participant(self):
         room = Room.create("r1")

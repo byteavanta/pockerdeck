@@ -11,6 +11,7 @@ class RoomApp {
     this.myVote = null;
     this.shouldReconnect = true;
     this.editingBliIndex = null;
+    this.editingVoteResultIndex = null;
     this.lastState = null;
     this.confirmingDeleteBli = null;
     this.renamingUser = null;
@@ -774,10 +775,42 @@ class RoomApp {
       li.appendChild(title);
 
       if (item.vote_result) {
-        var resultBadge = document.createElement('span');
-        resultBadge.className = 'bli-tag bli-vote-result';
-        resultBadge.textContent = item.vote_result;
-        li.appendChild(resultBadge);
+        if (isAdmin && self.editingVoteResultIndex === idx) {
+          var vrInput = document.createElement('input');
+          vrInput.type = 'text';
+          vrInput.className = 'bli-edit-input';
+          vrInput.maxLength = 20;
+          vrInput.value = item.vote_result;
+          (function (i, inp) {
+            inp.addEventListener('keydown', function (e) {
+              if (e.key === 'Enter')  { e.preventDefault(); self.submitEditVoteResult(i, inp.value); }
+              if (e.key === 'Escape') { self.cancelEditVoteResult(); }
+            });
+            inp.addEventListener('blur', function () {
+              if (inp.value.trim()) self.submitEditVoteResult(i, inp.value);
+            });
+          }(idx, vrInput));
+          li.appendChild(vrInput);
+          setTimeout(function () { vrInput.focus(); }, 0);
+        } else if (isAdmin) {
+          var resultBadge = document.createElement('span');
+          resultBadge.className = 'bli-tag bli-vote-result';
+          resultBadge.textContent = item.vote_result;
+          resultBadge.style.cursor = 'pointer';
+          (function (i) {
+            resultBadge.addEventListener('click', function () {
+              self.editingVoteResultIndex = i;
+              self.confirmingDeleteBli = null;
+              self.renderBacklogInline();
+            });
+          }(idx));
+          li.appendChild(resultBadge);
+        } else {
+          var resultBadge = document.createElement('span');
+          resultBadge.className = 'bli-tag bli-vote-result';
+          resultBadge.textContent = item.vote_result;
+          li.appendChild(resultBadge);
+        }
       }
 
       if (isActive) {
@@ -1000,7 +1033,7 @@ class RoomApp {
     input.focus();
   }
 
-  startEditBli(index)  { this.confirmingDeleteBli = null; this.editingBliIndex = index; this.renderBacklogInline(); }
+  startEditBli(index)  { this.confirmingDeleteBli = null; this.editingBliIndex = index; this.editingVoteResultIndex = null; this.renderBacklogInline(); }
 
   submitEditBli(index, value) {
     var title = value.trim();
@@ -1010,6 +1043,14 @@ class RoomApp {
   }
 
   cancelEditBli()      { this.editingBliIndex = null; this.renderBacklogInline(); }
+
+  submitEditVoteResult(index, value) {
+    if (!value.trim()) return;
+    this.editingVoteResultIndex = null;
+    this.send({ action: 'set_vote_result', index: index, value: value.trim() });
+  }
+
+  cancelEditVoteResult() { this.editingVoteResultIndex = null; this.renderBacklogInline(); }
 
   confirmDeleteBli(index) { this.editingBliIndex = null; this.confirmingDeleteBli = index; this.renderBacklogInline(); }
   cancelDeleteBli()       { this.confirmingDeleteBli = null; this.renderBacklogInline(); }
