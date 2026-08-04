@@ -570,6 +570,9 @@ class RoomApp {
       revealBtn.classList.add('hidden');
       resetBtn.classList.toggle('hidden', !canAct);
       timerPicker.classList.add('hidden');
+      document.querySelectorAll('.vote-card').forEach(function (card) {
+        card.classList.remove('selected');
+      });
     } else {
       cardsPanel.classList.toggle('hidden', isViewer);
       revealBtn.classList.toggle('hidden', !canAct);
