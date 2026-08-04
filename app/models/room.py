@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -100,8 +101,65 @@ class Room:
         if not p or not (p.role in ("admin", "user") or (p.role == "viewer" and self.admin == user_name)):
             return False
         self.revealed = True
+        if self.active_bli is not None and 0 <= self.active_bli < len(self.backlog):
+            result = self._compute_vote_result()
+            if result is not None:
+                self.backlog[self.active_bli].vote_result = result
         logger.debug("Room %s: votes revealed by '%s'", self.id, user_name)
         return True
+
+    def _compute_vote_result(self) -> Optional[str]:
+        """Compute a single display value from current participant votes.
+
+        Rules:
+        - Viewers are excluded.
+        - Participants who have not voted are excluded.
+        - If no votes remain, return None.
+        - If all votes are non-numeric, return the most common value; if the
+          top count is tied, return all tied values joined with " / " (e.g. "S / L").
+        - If any vote is "?", return "Needs discussion".
+        - If votes are a mix of numeric and non-numeric, return "Needs discussion".
+        - If all votes are numeric, return the average formatted as an integer
+          when it is whole, otherwise rounded to one decimal place.
+        """
+        votes = [
+            p.vote
+            for p in self.participants.values()
+            if p.role != "viewer" and p.vote is not None
+        ]
+        if not votes:
+            return None
+
+        numeric_votes: List[float] = []
+        non_numeric_votes: List[str] = []
+        for v in votes:
+            try:
+                parsed = float(v)
+                if not math.isfinite(parsed):
+                    raise ValueError("non-finite")
+                numeric_votes.append(parsed)
+            except (ValueError, TypeError):
+                non_numeric_votes.append(v)
+
+        if non_numeric_votes and numeric_votes:
+            return "Needs discussion"
+
+        if non_numeric_votes:
+            if "?" in non_numeric_votes:
+                return "Needs discussion"
+            # All non-numeric: return the most common value, or tied values joined on a tie
+            top, *rest = sorted(set(non_numeric_votes), key=non_numeric_votes.count, reverse=True)
+            if rest and non_numeric_votes.count(top) == non_numeric_votes.count(rest[0]):
+                top_count = non_numeric_votes.count(top)
+                tied = sorted(v for v in set(non_numeric_votes) if non_numeric_votes.count(v) == top_count)
+                return " / ".join(tied)
+            return top
+
+        # All numeric: return average, formatted as integer when whole
+        avg = sum(numeric_votes) / len(numeric_votes)
+        if avg == int(round(avg)):
+            return str(int(round(avg)))
+        return str(round(avg, 1))
 
     def reset(self, user_name: str, story: str = "") -> bool:
         p = self.participants.get(user_name)
@@ -136,6 +194,14 @@ class Room:
         self.backlog[index].title = title
         if self.active_bli == index:
             self.story = title
+        return True
+
+    def set_vote_result(self, index: int, value: str) -> bool:
+        value = str(value).strip()[:20]
+        if not value or not isinstance(index, int) or not (0 <= index < len(self.backlog)):
+            return False
+        self.backlog[index].vote_result = value
+        logger.debug("Room %s: vote result set on item %d to '%s'", self.id, index, value)
         return True
 
     def delete_backlog_item(self, index: int) -> bool:
