@@ -67,7 +67,7 @@ class RoomApp {
 
     // Close rename popover on outside click
     document.addEventListener('click', function (e) {
-      if (self.renamingUser && !e.target.closest('.rename-popover') && !e.target.closest('.btn-icon')) {
+      if (self.renamingUser && !e.target.closest('.rename-popover') && !e.target.closest('.btn-rename')) {
         self.renamingUser = null;
         self._renderParticipantsDOM(self.lastState);
       }
@@ -662,6 +662,12 @@ class RoomApp {
       nameEl.textContent = name + (info.role === 'admin' ? ' 👑' : '');
     }
 
+    // Remove rename popover if no longer renaming this user
+    if (!self.renamingUser || self.renamingUser !== name) {
+      var popover = card.querySelector('.rename-popover');
+      if (popover) card.removeChild(popover);
+    }
+
     // Update admin controls
     var actions = card.querySelector('.p-actions');
     if (isAdmin && !isMe) {
@@ -729,7 +735,7 @@ class RoomApp {
     actions.className = 'p-actions';
 
     var renameBtn = document.createElement('button');
-    renameBtn.className = 'btn-icon';
+    renameBtn.className = 'btn-icon btn-rename';
     renameBtn.title = 'Rename';
     renameBtn.textContent = '✏️';
     renameBtn.addEventListener('click', function (e) {
@@ -773,6 +779,7 @@ class RoomApp {
       if (!newName) return;
       self.send({ action: 'rename_user', target: targetName, new_name: newName });
       self.renamingUser = null;
+      self._renderParticipantsDOM(self.lastState);
     });
 
     var cancelBtn = document.createElement('button');
