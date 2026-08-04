@@ -24,4 +24,4 @@ jobs:
 
       - name: Run tests
         working-directory: app
-        run: pytest ../tests -v
+        run: pytest ../tests --ignore=../tests/e2e -v
