@@ -299,6 +299,48 @@ class TestWebSocketViewerAdmin:
                 assert "Bob" not in state["users"]
 
 
+class TestWebSocketSetVoteResult:
+    def test_admin_can_set_vote_result(self):
+        """Admin sends set_vote_result; broadcast state reflects updated vote_result on the BLI."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws:
+            ws.receive_json()  # initial state after Alice joins as admin
+
+            ws.send_json({"action": "add_bli", "title": "Story 1"})
+            ws.receive_json()  # state after BLI added
+
+            ws.send_json({"action": "set_vote_result", "index": 0, "value": "13"})
+            state = ws.receive_json()
+
+            assert state["backlog"][0]["vote_result"] == "13"
+
+    def test_non_admin_cannot_set_vote_result(self):
+        """Non-admin sends set_vote_result; vote_result is unchanged in broadcast."""
+        client = TestClient(app)
+        room = room_manager.create_room()
+        rid = room.id
+
+        with client.websocket_connect(f"/ws/{rid}/Alice?role=user") as ws_alice:
+            ws_alice.receive_json()  # Alice joins as admin
+
+            ws_alice.send_json({"action": "add_bli", "title": "Story 1"})
+            ws_alice.receive_json()  # state after BLI added
+
+            with client.websocket_connect(f"/ws/{rid}/Bob?role=user") as ws_bob:
+                ws_alice.receive_json()  # state after Bob joins
+                ws_bob.receive_json()
+
+                # Bob (non-admin) tries to set vote result — should be ignored
+                ws_bob.send_json({"action": "set_vote_result", "index": 0, "value": "8"})
+
+                # No broadcast is sent; verify via room model
+                r = room_manager.get_room(rid)
+                assert r.backlog[0].vote_result is None
+
+
 class TestHomeRoute:
     def test_home_returns_200(self):
         client = TestClient(app)

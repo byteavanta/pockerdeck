@@ -1171,6 +1171,8 @@ body {
 .bli-tag.active-tag { background: #4f46e5; color: white; }
 .bli-tag.done-tag   { background: #d1fae5; color: #065f46; }
 
+.bli-vote-result { background: #ede9fe; color: #4f46e5; }
+
 .bli-vote-btn {
   font-size: 0.78rem;
   padding: 0.25rem 0.7rem;
@@ -1468,6 +1470,7 @@ body {
 [data-theme="dark"] .backlog-item { border-color: #2a2a2a; background: #141414; color: #cbd5e1; }
 [data-theme="dark"] .backlog-item.active { border-color: #4f46e5; background: #222222; }
 [data-theme="dark"] .backlog-item .bli-num { color: #64748b; }
+[data-theme="dark"] .bli-vote-result { background: #1e1b4b; color: #a5b4fc; }
 [data-theme="dark"] .backlog-add-row input { background: #111111; border-color: #2a2a2a; color: #e2e8f0; }
 [data-theme="dark"] .backlog-add-row input:focus { border-color: #818cf8; }
 [data-theme="dark"] .bli-edit-input { background: #111111; border-color: #4f46e5; color: #e2e8f0; }

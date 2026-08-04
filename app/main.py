@@ -132,6 +132,9 @@ async def websocket_endpoint(
             elif action == "select_bli" and is_admin:
                 changed = room.select_backlog_item(data.get("index"))
 
+            elif action == "set_vote_result" and is_admin:
+                changed = room.set_vote_result(data.get("index"), data.get("value", ""))
+
             elif action == "kick" and is_admin:
                 target = str(data.get("target", ""))[:32]
                 if target != user_name and target in conn_manager.connections.get(room_id, {}):
